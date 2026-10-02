@@ -9,7 +9,8 @@ import pytest
 
 from engine.config import LATITUDE, SUNSHINE_YEARS_USED, FIRST_YEAR, LAST_YEAR
 from engine.pipeline import prepare_days, evaluate_all_periods
-from engine.validation import read_table, detect_columns, build_input, exclusion_reasons, parse_dates
+from engine.validation import (read_table, detect_columns, ambiguous_columns, build_input, exclusion_reasons,
+                               parse_dates)
 
 
 def _xlsx(df):
@@ -50,6 +51,15 @@ def test_detect_imd_and_named_columns():
     found = detect_columns(["Obs Date", "Max Temp (°C)", "Min Temp (°C)", "Bright Sunshine (h)", "Rain"])
     assert (found["Date"], found["Tmax"], found["Tmin"], found["SSH"]) == \
         ("Obs Date", "Max Temp (°C)", "Min Temp (°C)", "Bright Sunshine (h)")
+
+
+def test_ambiguous_columns_are_not_guessed():
+    cols = ["Date", "Tmax", "MAX", "Tmin", "SSH"]               # two exact Tmax candidates
+    found = detect_columns(cols)
+    assert found["Tmax"] is None and found["Tmin"] == "Tmin" and found["SSH"] == "SSH"
+    assert ambiguous_columns(cols) == {"Tmax": ["Tmax", "MAX"]}
+    found = detect_columns(["Date", "Max Temp", "Max Temp (station 2)", "Min Temp", "Sunshine"])
+    assert found["Tmax"] is None and found["Tmin"] == "Min Temp"  # two keyword candidates
 
 
 def test_dates_year_first_never_swapped():
