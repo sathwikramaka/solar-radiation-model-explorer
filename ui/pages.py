@@ -1,17 +1,20 @@
-"""The four pages: Overview, Model Explorer, Upload & Analyze, Methodology."""
+"""The four pages: Overview, Model Explorer, Upload & Analyze, Methodology.
+
+Pages only display engine output; every number comes from data/demo/ or from the engine run on an upload.
+"""
 import hashlib
 import io
+from html import escape
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from engine.config import (DISTRICTS, LATITUDE, MODELS, PERIODS, SEASON_OF_MONTH, MIN_DAYS,
-                           FIRST_YEAR, LAST_YEAR, A_AP, B_AP)
+from engine.config import (DISTRICTS, LATITUDE, MODELS, PERIODS, MIN_DAYS, FIRST_YEAR, LAST_YEAR, A_AP, B_AP)
 from engine.models import MODEL_INFO
 from engine.pipeline import prepare_days, evaluate_all_periods, top3
 from engine.validation import (read_table, detect_columns, ambiguous_columns, build_input,
-                               exclusion_reasons, TEMPLATE)
+                               exclusion_reasons, TEMPLATE, ALIASES)
 from ui import components as C
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +35,12 @@ UNAVAILABLE = {
 DISTRICT_NOTE = {"Ahmedabad": "all 22 sunshine-years used", "Amreli": "15 of 22 sunshine-years used",
                  "Okha": "2002–2021 used (2022–23 failed QC)", "Surat": "sunshine record unusable",
                  "Deesa": "sunshine record unusable"}
+VAR_LABEL = {"Date": "Date", "Year": "Year", "Month": "Month", "Day": "Day", "Tmax": "maximum temperature (Tmax)",
+             "Tmin": "minimum temperature (Tmin)", "SSH": "sunshine duration (SSH)"}
+METHOD_STEPS = [("dataset", "Input", "Tmax, Tmin, sunshine, latitude"), ("fact_check", "QC", "inclusion rules"),
+                ("public", "Solar geometry", "Ra and day length N"), ("wb_sunny", "A–P reference", "Rs from sunshine"),
+                ("model_training", "16 models", "Rs from temperature"), ("analytics", "Metrics", "RMSE · MAE · MBE · R²"),
+                ("emoji_events", "GPI", "one combined score"), ("leaderboard", "Ranking", "Top 3 per period")]
 
 
 # ================================================================= data
@@ -52,89 +61,146 @@ def load_demo_daily():
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
-def run_analysis(clean, latitude, site):
-    """Uploaded data through the same engine (no sunshine-year filter, all dates: decisions D1, D2)."""
+def _prepare(clean, latitude):
+    """Stage 1 — solar geometry, A-P reference, 16 model estimates, inclusion rules (engine.pipeline.prepare_days)."""
     days = prepare_days(clean, latitude)
     days["source_row"] = clean.source_row.to_numpy()
     days["exclusion_reason"] = exclusion_reasons(days)
-    return days, evaluate_all_periods(days, site)
+    return days
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def _evaluate(days, site):
+    """Stage 2 — metrics, GPI and ranking for all five periods (engine.pipeline.evaluate_all_periods)."""
+    return evaluate_all_periods(days, site)
+
+
+def run_analysis(clean, latitude, site):
+    """Uploaded data through the same engine (no sunshine-year filter, all dates: decisions D1, D2)."""
+    days = _prepare(clean, latitude)
+    return days, _evaluate(days, site)
+
+
+def ranked_districts(results):
+    ok = results[(results.period == "Annual") & (results.status == "ok")].district.unique()
+    return [d for d in DISTRICTS if d in ok]
+
+
+def winner_matrix(results):
+    """District x period table of the Top 3 (rank 1 highlighted), straight from the validated results."""
+    head = "".join(f'<th>{C.icon(C.PERIOD_ICON[p])}{p}</th>' for p in PERIODS)
+    rows = ""
+    for d in DISTRICTS:
+        cells = ""
+        for p in PERIODS:
+            t = results[(results.district == d) & (results.period == p) & (results["rank"] <= 3)].sort_values("rank")
+            cells += ("<td>" + " · ".join(f'<span class="m1">{m}</span>' if i == 0 else m for i, m in enumerate(t.model))
+                      + "</td>") if len(t) else '<td class="na">reference unavailable</td>'
+        rows += f'<tr><td class="d">{d}</td>{cells}</tr>'
+    C.html(f'<div class="matrix-wrap"><table class="matrix"><thead><tr><th>District</th>{head}</tr></thead>'
+           f'<tbody>{rows}</tbody></table></div>')
 
 
 # ================================================================= Overview
 def overview():
     results, comparison = load_demo()
-    C.page_header("MSc Agriculture Analytics · Gujarat, India", "Solar Radiation Model Explorer",
-                  "Which temperature-based model best estimates daily solar radiation where only "
-                  "Tmax, Tmin and sunshine records exist? Sixteen published models are compared against the "
-                  "Ångström–Prescott reference and ranked with the Global Performance Indicator (GPI) — "
-                  "for the whole year and for each IMD season.", hero=True)
-    c1, c2, _ = st.columns([1, 1, 2])
-    c1.page_link(NAV["explorer"], label="Explore the models", icon=":material/insights:")
+    ranked = ranked_districts(results)
+    C.hero("MSc Agriculture Analytics · Gujarat, India", "Solar Radiation<br><span>Model Explorer</span>",
+           "Comparative analysis of 16 solar-radiation estimation models across seasons and locations — "
+           "each scored against the Ångström–Prescott reference and ranked with the Global Performance Indicator.",
+           [("location_on", "Gujarat, India"), ("sensors", "5 IMD stations"), ("calendar_month", f"{FIRST_YEAR}–{LAST_YEAR}"),
+            ("model_training", "16 models"), ("date_range", "5 periods")])
+    c1, c2, c3, _ = st.columns([1, 1, 1, 0.9])
+    with c1.container(key="cta_primary"):
+        st.page_link(NAV["explorer"], label="Explore the models", icon=":material/insights:")
     c2.page_link(NAV["upload"], label="Analyze your own data", icon=":material/upload_file:")
+    c3.page_link(NAV["method"], label="How it works", icon=":material/menu_book:")
 
-    used = int(comparison["days used"].sum())
-    C.kpis([("Models compared", "16", "M1 – M16, published coefficients", True),
-            ("Districts", "5", "3 ranked · 2 without reference", False),
-            ("Periods", "5", "Annual + 4 IMD seasons", False),
-            ("Study period", f"{FIRST_YEAR}–{LAST_YEAR}", "22 years", False),
-            ("Days evaluated", f"{used:,}", "district-days in the ranking", False)])
+    t3 = results[(results.status == "ok") & (results["rank"] <= 3)]
+    counts = t3.model.value_counts()
+    leaders = list(counts[counts == counts.max()].index)
+    cells = t3.groupby(["district", "period"]).ngroups
+    C.kpis([("Districts analysed", f"{len(DISTRICTS)}",
+             f"{len(ranked)} ranked · {len(DISTRICTS) - len(ranked)} without valid reference", "location_on", False),
+            ("Models evaluated", f"{len(MODELS)}", "published coefficients, none calibrated", "model_training", False),
+            ("Periods", f"{len(PERIODS)}", "Annual + 4 IMD seasons", "date_range", False),
+            ("Analysis period", f"{FIRST_YEAR}–{LAST_YEAR}", f"{LAST_YEAR - FIRST_YEAR + 1} years", "calendar_month", False),
+            ("Days evaluated", f"{int(comparison['days used'].sum()):,}", "district-days in the ranking",
+             "event_available", False),
+            ("Most often in Top 3", ", ".join(leaders), f"in {counts.max()} of {cells} ranked district-periods",
+             "emoji_events", True)], cols=3)
 
-    st.markdown("## Demonstration districts")
+    C.section("bar_chart", "Annual model comparison",
+              f"Annual GPI of all 16 models in the {len(ranked)} ranked districts · hover a dot for its rank and errors")
+    C.chart(C.annual_gpi_dots(results, ranked), "ov_annual")
+
+    C.section("date_range", "Seasonal comparison", "Top 3 models in every district and period · highlighted = rank 1")
+    winner_matrix(results)
+
+    C.section("military_tech", "Top 3 models", "Pick a district and a period", tone="sun")
+    a, b = st.columns([1, 1.6])
+    with a:
+        d = st.segmented_control("District", ranked, default=ranked[0], key="ov_d",
+                                 format_func=lambda x: f":material/location_on: {x}") or ranked[0]
+    with b:
+        p = C.period_picker("ov_p")
+    t = results[(results.district == d) & (results.period == p)]
+    if (t.status == "ok").all():
+        C.podium(t[t["rank"] <= 3].sort_values("rank"), f"{d} · {p}")
+    else:
+        C.unavailable(C.STATUS_TEXT.get(t.status.iloc[0], t.status.iloc[0]))
+
+    C.section("map", "Demonstration districts", "IMD stations, 2002–2023")
     cards = ""
-    for d in DISTRICTS:
-        row = comparison[comparison.district == d].iloc[0]
+    for dist in DISTRICTS:
+        row = comparison[comparison.district == dist].iloc[0]
         ok = row["days used"] > 0
-        top = row["Top 3 Annual"] if ok else "—"
-        cards += (f'<div class="district"><div class="name">{d}</div>'
-                  f'<span class="chip {"ok" if ok else "na"}">{"Ranked" if ok else "Reference unavailable"}</span>'
-                  f'<div class="meta">{LATITUDE[d]:.2f}° N · {int(row["days used"]):,} days<br>{DISTRICT_NOTE[d]}'
-                  f'<br>Annual Top 3: <b>{top}</b></div></div>')
+        chip = (f'<span class="chip ok">{C.icon("check_circle")}Ranked</span>' if ok else
+                f'<span class="chip na">{C.icon("cloud_off")}Reference unavailable</span>')
+        cards += (f'<div class="district"><div class="name">{C.icon("location_on")}{dist}</div>{chip}'
+                  f'<div class="meta">{LATITUDE[dist]:.2f}° N · {int(row["days used"]):,} days<br>{DISTRICT_NOTE[dist]}'
+                  f'<br>Annual Top 3: <b>{row["Top 3 Annual"] if ok else "—"}</b></div></div>')
     C.html(f'<div class="district-grid">{cards}</div>')
 
-    st.markdown("## How the comparison works")
-    C.flow([("Input", "Tmax, Tmin, sunshine hours"), ("QC", "inclusion rules"),
-            ("Solar geometry", "Ra and day length N"), ("A–P reference", "Rs from sunshine"),
-            ("16 models", "Rs from temperature"), ("Metrics", "RMSE · MAE · MBE · R²"),
-            ("GPI", "one combined score"), ("Ranking", "Top 3 per period")])
-    st.page_link(NAV["method"], label="Read the methodology", icon=":material/menu_book:")
-
-    st.markdown("## Purpose")
-    st.markdown("Solar radiation drives crop growth and evapotranspiration, yet it is measured at few stations. "
-                "Temperature is recorded almost everywhere, so temperature-based models are a practical substitute. "
-                "Their accuracy changes with season and place — this dashboard shows **which model to use, "
-                "where and when**, using the method of Karale et al. (2026).")
+    C.section("menu_book", "Method at a glance")
+    C.flow(METHOD_STEPS)
+    C.note("<b>Read the rankings with their assumptions.</b> The reference is radiation estimated from sunshine "
+           "hours (Ångström–Prescott), not measured radiation, and five interpretation choices of the paper are not yet "
+           "settled (M2 × 3.6, M8 Θ, M16 form, R² definition, signed MBE). See Methodology.")
     C.footer()
 
 
 # ================================================================= Model Explorer
 def explorer():
-    results, comparison = load_demo()
+    results, _ = load_demo()
     daily = load_demo_daily()
-    C.page_header("Validated project results", "Model Explorer",
-                  "Results of the five Gujarat districts, exactly as produced and validated by the project notebook.")
-    c1, c2 = st.columns([1, 1.25])
-    with c1:
-        district = st.segmented_control("District", DISTRICTS, default="Ahmedabad", key="ex_d") or "Ahmedabad"
-    with c2:
+    C.page_header("insights", "Validated project results", "Model Explorer",
+                  "All 16 models in five Gujarat districts, exactly as produced and validated by the project notebook. "
+                  "Choose a district, a season and a metric.")
+    with st.container(key="ex_filters"):
+        c1, c2 = st.columns([1.1, 1])
+        with c1:
+            district = st.segmented_control("District", DISTRICTS, default="Ahmedabad", key="ex_d",
+                                            format_func=lambda x: f":material/location_on: {x}") or "Ahmedabad"
+        with c2:
+            metric = C.metric_picker("ex_m")
         period = C.period_picker("ex_p")
-    metric = C.metric_picker("ex_m")
 
-    st.markdown(f"## {district} · {period}")
-    C.results_view(results[results.district == district], period, metric, key="ex",
+    C.section(C.PERIOD_ICON[period], f"{district} · {period}", f"{C.PERIOD_MONTHS[period]} · {LATITUDE[district]:.2f}° N")
+    C.results_view(results[results.district == district], period, metric, key="ex", context=f"{district} · {period}",
                    days=daily.get(district), unavailable_reason=UNAVAILABLE.get(district))
 
-    st.markdown("## Across districts")
-    st.caption(f"{C.label(metric)} of every model in each district · {period} · {C.METRIC_INFO[metric][1]}. "
-               "n/a = reference data unavailable.")
+    C.section("compare_arrows", "Across districts",
+              f"{C.label(metric)} of every model in each district · {period} · {C.METRIC_INFO[metric][1]} · "
+              "n/a = reference unavailable")
     sel = results[results.period == period]
     pivot = sel.pivot_table(index="model", columns="district", values=metric, dropna=False) \
         .reindex(index=MODELS, columns=DISTRICTS)
     C.chart(C.metric_heatmap(pivot, metric), "ex_cross")
-    st.markdown("### Top 3 by district and period")
-    st.dataframe(comparison.drop(columns=["annual rank-1 R2", "annual rank-1 RMSE"]), hide_index=True,
-                 width="stretch")
+    C.section("table_chart", "Top 3 in every district and period", "highlighted = rank 1")
+    winner_matrix(results)
 
-    with st.expander("Download the validated results (CSV)"):
+    with st.expander(":material/download: Download the validated results (CSV)"):
         cols = st.columns(4)
         for col, name in zip(cols, ["annual_gpi", "seasonal_gpi", "top_3_models", "model_ranking"]):
             col.download_button(name.replace("_", " ").title(), (DEMO / f"{name}.csv").read_bytes(),
@@ -201,56 +267,77 @@ def _stepper(slot, current):
         C.stepper(STEPS, current)
 
 
-def upload():
-    C.page_header("Run the method on your data", "Upload & Analyze",
-                  "Upload daily station data. It is processed locally by the same engine that reproduces the "
-                  "project results — nothing is sent elsewhere and your values are never altered.")
-    step_slot = st.empty()
+READ_ERROR_TITLE = [("empty", "This file is empty"), ("no data rows", "No data rows found"),
+                    (".xls", "Old Excel format"), ("Unsupported", "Unsupported file type"),
+                    ("could not be read", "The file could not be read")]
 
-    with st.expander("What file do I need?", expanded=False):
-        st.markdown("One row per day, with these columns (names are detected automatically; you can also "
-                    "assign them by hand):")
-        st.dataframe(pd.DataFrame({
-            "Variable": ["Date", "Tmax", "Tmin", "SSH"],
-            "Meaning": ["Calendar date — or three columns Year, Month, Day",
-                        "Daily maximum air temperature", "Daily minimum air temperature",
-                        "Bright sunshine duration (n)"],
-            "Unit": ["e.g. 2020-01-31 or 31/01/2020", "°C", "°C", "hours"],
-            "Recognised names": ["Date · YEAR + MN + DT", "Tmax, MAX, Max Temp", "Tmin, MIN, Min Temp",
-                                 "SSH, Sunshine, BSS"]}), hide_index=True, width="stretch")
-        st.markdown("Blank cells are treated as missing. Leave gaps as blanks — do not fill them.")
-        t1, t2, _ = st.columns([1, 1, 2])
-        t1.download_button("Template (.xlsx)", _template_bytes("xlsx"), "solar_template.xlsx", width="stretch")
-        t2.download_button("Template (.csv)", _template_bytes("csv"), "solar_template.csv", "text/csv", width="stretch")
-        st.caption("Template rows are illustrative only — replace them with your station's data.")
+
+def _names(var):
+    return ", ".join(f"<code>{a}</code>" for a in ALIASES[var][:4])
+
+
+def _upload_intro():
+    specs = [("event", "Date", "calendar date, e.g. 2020-01-31 or 31/01/2020 — or Year, Month, Day columns"),
+             ("thermostat", "Tmax", "daily maximum air temperature, °C"),
+             ("device_thermostat", "Tmin", "daily minimum air temperature, °C"),
+             ("wb_sunny", "SSH", "bright sunshine duration, hours")]
+    cols = "".join(f'<div class="colspec"><div class="k">{C.icon(i)}{k}</div><div class="u">{escape(u)}</div></div>'
+                   for i, k, u in specs)
+    C.html(f'<div class="card" style="margin-bottom:.9rem"><div class="dropinfo"><div class="ibadge">{C.icon("cloud_upload")}</div><div>'
+           f'<div class="h">Upload a daily station dataset</div>'
+           f'<div class="b">One row per day. Column names are detected automatically when they are unambiguous — '
+           f'otherwise you choose. Blank cells count as missing; leave gaps blank, do not fill them.</div>'
+           f'<div class="chips" style="margin-top:.7rem">'
+           f'<span class="chip">{C.icon("table_view")}.xlsx</span><span class="chip">{C.icon("csv")}.csv</span>'
+           f'<span class="chip">{C.icon("database")}up to 25 MB</span>'
+           f'<span class="chip">{C.icon("lock")}processed in memory, not stored</span></div>'
+           f'<div class="cols">{cols}</div></div></div></div>')
+
+
+def upload():
+    C.page_header("upload_file", "Run the method on your data", "Upload & Analyze",
+                  "Upload daily station data and run the same validated engine: 16 models, RMSE, MAE, MBE, R², GPI and "
+                  "ranking for the year and each season. Your values are never altered.")
+    step_slot = st.empty()
+    _upload_intro()
+    t1, t2, _ = st.columns([1, 1, 2.2])
+    t1.download_button("Template (.xlsx)", _template_bytes("xlsx"), "solar_template.xlsx", width="stretch",
+                       icon=":material/table_view:")
+    t2.download_button("Template (.csv)", _template_bytes("csv"), "solar_template.csv", "text/csv", width="stretch",
+                       icon=":material/description:")
 
     file = st.file_uploader("Upload an Excel (.xlsx) or CSV file", type=["xlsx", "csv", "xls"])
     if file is None:
         _stepper(step_slot, 0)
+        C.state("empty", "upload_file", "No dataset uploaded yet",
+                "Drop an <b>.xlsx</b> or <b>.csv</b> file above. Not sure about the layout? Download a template — "
+                "its rows are illustrative only.")
         C.footer()
         return
     data = file.getvalue()
     try:
         sheets = read_table(file.name, data)
     except ValueError as exc:
-        C.checks([("error", str(exc))])
+        title = next((t for k, t in READ_ERROR_TITLE if k in str(exc)), "This file can't be read")
+        C.state("error", "error", title, f"{escape(str(exc))}<ul><li>Accepted formats: <b>.xlsx</b> and <b>.csv</b>.</li>"
+                "<li>The first row must hold column names; each further row is one day.</li></ul>")
         _stepper(step_slot, 0)
         return
     sheet = st.selectbox("Sheet", list(sheets), key="up_sheet") if len(sheets) > 1 else next(iter(sheets))
     raw = sheets[sheet]
 
     # ---------------------------------------------------------------- Validate & map
-    st.markdown("## 1 · Check the columns")
-    st.caption(f"{len(raw):,} rows × {len(raw.columns)} columns read from “{file.name}”. First rows:")
+    C.section("fact_check", "1 · Check the columns",
+              f"{len(raw):,} rows × {len(raw.columns)} columns read from “{escape(file.name)}”")
     st.dataframe(raw.head(6), hide_index=True, width="stretch")
     cols = [None] + list(raw.columns)
     found = detect_columns(list(raw.columns))
     ambiguous = {v: c for v, c in ambiguous_columns(list(raw.columns)).items()
                  if not (found["Date"] is not None and v in ("Year", "Month", "Day"))}
-    if ambiguous:
-        C.checks([("warning", f"Several columns could be {v}: " + ", ".join(f"“{x}”" for x in c)
-                   + ". It was not assigned automatically — please choose the right one below.")
-                  for v, c in ambiguous.items()])
+    for v, c in ambiguous.items():
+        C.state("warn", "help", f"Your file was uploaded, but we couldn't identify a unique {VAR_LABEL[v]} column",
+                f"{len(c)} columns could be {v}: " + ", ".join(f"<code>{escape(str(x))}</code>" for x in c)
+                + ". Nothing was guessed — please choose the right one below.")
     mode = st.radio("Date given as", ["One date column", "Year, Month and Day columns"], horizontal=True,
                     index=0 if found["Date"] is not None or found["Year"] is None else 1, key="up_mode")
 
@@ -277,18 +364,35 @@ def upload():
         dayfirst = order.startswith("Day")
 
     clean, messages, excluded = build_input(raw, mapping, dayfirst)
-    C.checks(messages)
     if clean is None:
+        need = (["Date"] if mode == "One date column" else ["Year", "Month", "Day"]) + ["Tmax", "Tmin", "SSH"]
+        missing = [v for v in need if mapping.get(v) is None]
+        if missing:
+            title = (f"We couldn't identify a unique {VAR_LABEL[missing[0]]} column" if missing[0] in ambiguous
+                     else f"No column assigned for {', '.join(missing)}")
+            hint = "".join(f"<li><b>{v}</b> — recognised names include {_names(v)}</li>" for v in missing)
+            C.state("error", "rule", title, f"{escape(messages[0][1])}<ul>{hint}</ul>"
+                    "Choose the matching column in the selectors above, or rename it in your file.")
+        else:
+            C.state("error", "error", "The data can't be analysed yet",
+                    "<br>".join(escape(t) for lvl, t in messages if lvl == "error"))
+            C.checks([m for m in messages if m[0] != "error"])
         _stepper(step_slot, 1)
         return
+    period_msg = next((t for lvl, t in messages if t.startswith("Period in file")), "")
+    C.state("ok", "task_alt", "Dataset ready",
+            escape(period_msg) + "<br>" + " · ".join(escape(t.replace(" detected", "")) for lvl, t in messages if lvl == "ok"))
+    issues = [m for m in messages if m[0] in ("warning", "info") and not m[1].startswith("Period in file")]
+    if issues:
+        C.checks(issues)
     if len(excluded):
-        with st.expander(f"{len(excluded)} row(s) excluded before the analysis — show"):
+        with st.expander(f":material/block: {len(excluded)} row(s) excluded before the analysis — show"):
             st.dataframe(excluded, hide_index=True, width="stretch")
-    with st.expander("Preview of the data as it will be analysed"):
+    with st.expander(":material/visibility: Preview of the data as it will be analysed"):
         st.dataframe(clean.head(10), hide_index=True, width="stretch")
 
     # ---------------------------------------------------------------- Location
-    st.markdown("## 2 · Station location")
+    C.section("location_on", "2 · Station location", "Latitude sets the Sun's geometry (Ra and day length N)")
     a, b = st.columns([1.3, 1])
     site = a.text_input("Station name", value=Path(file.name).stem, key="up_site").strip() or "Uploaded station"
     latitude = b.number_input("Latitude (decimal degrees, north positive)", min_value=-66.0, max_value=66.0,
@@ -296,17 +400,24 @@ def upload():
                               help="Needed for extraterrestrial radiation Ra and day length N. "
                                    "Limited to ±66° (the sunset-hour-angle formula is undefined in polar day/night).")
     if latitude is None:
-        C.note("Enter the station latitude to continue.")
+        C.note("Enter the station latitude to continue.", "info")
         _stepper(step_slot, 2)
         return
 
     # ---------------------------------------------------------------- Calculate
-    st.markdown("## 3 · Calculate")
+    C.section("calculate", "3 · Run the analysis", "16 models · 4 metrics · GPI · 5 periods")
     signature = hashlib.sha1(repr((file.name, hashlib.sha1(data).hexdigest(), sheet, sorted(mapping.items()),
                                    dayfirst, latitude, site)).encode()).hexdigest()
-    if st.button("Run the 16 models", type="primary", icon=":material/play_arrow:"):
-        with st.spinner("Calculating solar geometry, reference radiation, 16 models, metrics and GPI …"):
-            st.session_state["up_result"] = (signature, *run_analysis(clean, latitude, site))
+    if st.button("Run the 16 models", type="primary", icon=":material/play_arrow:", key="run_btn"):
+        with st.status("Running the analysis …", expanded=True) as status:
+            C.progress()
+            st.write(":material/public: Preparing solar geometry, the Ångström–Prescott reference and 16 model estimates …")
+            days = _prepare(clean, latitude)
+            st.write(":material/functions: Calculating RMSE, MAE, MBE and R², and building the GPI ranking …")
+            results = _evaluate(days, site)
+            status.update(label=f"Analysis complete — {int(days.used.sum()):,} days evaluated",
+                          state="complete", expanded=False)
+        st.session_state["up_result"] = (signature, days, results)
     stored = st.session_state.get("up_result")
     if not stored or stored[0] != signature:
         st.caption("Press the button to run the analysis. Changing any setting above requires a new run.")
@@ -316,30 +427,27 @@ def upload():
     _stepper(step_slot, 4)
 
     # ---------------------------------------------------------------- Results
-    st.markdown(f"## 4 · Results — {site}")
+    C.section("insights", f"4 · Results — {escape(site)}", f"{days.Date.min():%d %b %Y} – {days.Date.max():%d %b %Y}")
     used = int(days.used.sum())
-    C.kpis([("Rows in file", f"{len(raw):,}", "as uploaded", False),
-            ("Excluded before analysis", f"{len(excluded):,}", "invalid / duplicate dates", False),
-            ("Excluded by method rules", f"{len(days) - used:,}", "see breakdown below", False),
-            ("Days evaluated", f"{used:,}", f"{days.Date.min():%Y} – {days.Date.max():%Y}", True)])
+    C.kpis([("Rows in file", f"{len(raw):,}", "as uploaded", "table_rows", False),
+            ("Excluded before analysis", f"{len(excluded):,}", "invalid / duplicate dates", "block", False),
+            ("Excluded by method rules", f"{len(days) - used:,}", "see breakdown below", "rule", False),
+            ("Days evaluated", f"{used:,}", f"{days.Date.min():%Y} – {days.Date.max():%Y}", "event_available", True)])
     reasons = days.exclusion_reason[days.exclusion_reason != ""].value_counts()
     if len(reasons):
-        with st.expander("Why were days excluded?"):
+        with st.expander(":material/help: Why were days excluded?"):
             st.dataframe(reasons.rename_axis("reason").reset_index(name="days"), hide_index=True, width="stretch")
             st.caption("Each day is counted once, under the first rule it fails. Values are never filled or clipped.")
     C.note("The project's satellite cross-check of the sunshine record (used for the five demonstration districts) "
            "cannot be run on uploaded data. Results assume your sunshine record is correct and correctly dated.")
 
-    c1, c2 = st.columns([1.25, 1])
-    with c1:
+    with st.container(key="up_filters"):
         period = C.period_picker("up_p")
-    with c2:
         metric = C.metric_picker("up_m")
-    C.results_view(results, period, metric, key="up", days=days)
+    C.results_view(results, period, metric, key="up", context=f"{site} · {period}", days=days)
 
-    st.markdown("## Download")
+    C.section("download", "Download", "Every table plus validation messages, excluded rows and settings")
     files = _downloads(signature, days, results, excluded, messages, site, latitude)
-    st.caption("The workbook holds every table below plus the validation messages, excluded rows and settings used.")
     st.download_button("All results (Excel workbook)", files["xlsx"], f"{site}_solar_model_results.xlsx",
                        type="primary", icon=":material/download:")
     a, b, c, d = st.columns(4)
@@ -351,78 +459,66 @@ def upload():
 
 
 # ================================================================= Methodology
+def _card(ic, title, body, tone=""):
+    return f'<div class="card hover"><div class="ibadge {tone}">{C.icon(ic)}</div><h4>{title}</h4>{body}</div>'
+
+
 def methodology():
-    C.page_header("How the results are produced", "Methodology",
-                  "The dashboard implements the final project notebook without changes. Each step below maps to "
-                  "one file in the engine/ folder.")
-    C.flow([("Input", "Tmax, Tmin, sunshine n, latitude"),
-            ("QC", "keep only valid days"),
-            ("Solar geometry", "Ra, day length N (FAO-56)"),
-            ("A–P reference", "Rs = (0.25 + 0.50 n/N) Ra"),
-            ("16 models", "Rs from temperature"),
-            ("Metrics", "RMSE · MAE · MBE · R²"),
-            ("GPI", "combine the four"),
-            ("Ranking", "highest GPI = rank 1")])
+    C.page_header("menu_book", "How the results are produced", "Methodology",
+                  "The dashboard implements the final project notebook without changes. Each step maps to one file in "
+                  "the engine/ folder.")
+    C.flow(METHOD_STEPS)
 
-    left, right = st.columns(2, gap="large")
-    with left:
-        st.markdown("### 1 · Inputs")
-        st.markdown("- **Tmax, Tmin** (°C) — daily air temperature; ΔT = Tmax − Tmin drives most models\n"
-                    "- **n** (h) — bright sunshine hours, used only for the reference\n"
-                    "- **Latitude** — fixes the Sun's geometry")
-        st.markdown("### 2 · Quality control")
-        st.markdown("A day is used only if **all** hold:\n"
-                    "- Tmax and Tmin present and **ΔT > 0**\n"
-                    "- sunshine present and **0 ≤ n ≤ N**\n"
-                    "- all 16 models give a finite value\n"
-                    "- *(demo districts only)* the year passed the satellite sunshine check\n\n"
-                    f"A period needs **≥ {MIN_DAYS} days**. Nothing is filled, clipped or recalibrated.")
-        st.markdown("### 3 · Solar geometry and 4 · reference")
-        st.markdown("Extraterrestrial radiation **Ra** and day length **N** follow FAO-56. The reference is the "
-                    "Ångström–Prescott radiation **Rs = (0.25 + 0.50·n/N)·Ra** — a sunshine-based standard, "
-                    "*not* measured radiation.")
-    with right:
-        st.markdown("### 6 · Metrics")
-        st.dataframe(pd.DataFrame({
-            "Metric": ["RMSE", "MAE", "MBE", "R²"],
-            "Measures": ["typical error size (penalises large errors)", "average error size",
-                         "systematic bias (+ over, − under)", "share of variation explained"],
-            "Best": ["0", "0", "0", "1"]}), hide_index=True, width="stretch")
-        st.markdown("### 7 · GPI and 8 · ranking")
-        st.markdown("Within one site and period, each metric is scaled to 0–1 across the 16 models. "
-                    "A model scores for every metric on which it beats the **median** model:\n\n"
-                    "GPI = Σ α · (median − scaled value), α = −1 for R², +1 for RMSE, MAE, MBE.\n\n"
-                    "Highest GPI → rank 1; the three highest form the **Top 3**.")
-        st.markdown("### Seasons (IMD)")
-        seasons = {}
-        for m, s in SEASON_OF_MONTH.items():
-            seasons.setdefault(s, []).append(pd.Timestamp(2001, m, 1).strftime("%b"))
-        st.dataframe(pd.DataFrame({"Period": PERIODS,
-                                   "Months": ["Jan – Dec"] + [f"{v[0]} – {v[-1]}" for v in seasons.values()]}),
-                     hide_index=True, width="stretch")
+    C.section("account_tree", "The pipeline", first=True)
+    C.html('<div class="card-grid c3">'
+           + _card("dataset", "1 · Inputs", "<ul><li><b>Tmax, Tmin</b> (°C) — ΔT = Tmax − Tmin drives most models</li>"
+                   "<li><b>n</b> (h) — bright sunshine, used only for the reference</li><li><b>Latitude</b> — the Sun's geometry</li></ul>")
+           + _card("fact_check", "2 · Quality control", "<ul><li>Tmax, Tmin present and ΔT &gt; 0</li><li>sunshine present and 0 ≤ n ≤ N</li>"
+                   "<li>all 16 models finite</li><li><i>demo only:</i> year passed the satellite sunshine check</li></ul>"
+                   f"<p style='margin-top:.4rem'>A period needs ≥ {MIN_DAYS} days. Nothing is filled, clipped or recalibrated.</p>")
+           + _card("public", "3 · Solar geometry", "<p>Extraterrestrial radiation <b>Ra</b> and maximum day length <b>N</b> "
+                   "from latitude and day of year, following FAO-56.</p>")
+           + _card("wb_sunny", "4 · A–P reference", "<p><b>Rs = (0.25 + 0.50·n/N)·Ra</b> — the sunshine-based standard of the "
+                   "paper. It is <i>estimated</i>, not measured, radiation.</p>", "sun")
+           + _card("analytics", "6 · Metrics", "<ul><li><b>RMSE</b> — typical error size, penalises large errors (best 0)</li>"
+                   "<li><b>MAE</b> — average error size (best 0)</li><li><b>MBE</b> — bias; + over, − under (best 0)</li>"
+                   "<li><b>R²</b> = 1 − SSE/SST — variation explained (best 1, can be negative)</li></ul>")
+           + _card("emoji_events", "7 · GPI and 8 · ranking", "<p>Each metric is scaled to 0–1 across the 16 models. A model "
+                   "scores for every metric on which it beats the <b>median</b> model:</p>"
+                   "<p style='margin:.35rem 0'><b>GPI = Σ α·(median − scaled)</b>, α = −1 for R², +1 otherwise.</p>"
+                   "<p>Highest GPI → rank 1; ranks 1–3 are the Top 3.</p>", "sun")
+           + '</div>')
 
-    st.markdown("### 5 · The sixteen models")
-    st.dataframe(pd.DataFrame([{"Model": m, "Author": a, "Equation (Rs, Ra in MJ m⁻² d⁻¹)": e}
-                               for m, (a, e) in MODEL_INFO.items()]), hide_index=True, width="stretch", height=597)
-    st.caption("Published coefficients from Karale et al. (2026), Table 2 — nothing is calibrated.")
+    C.section("date_range", "Seasons (IMD)")
+    C.html('<div class="matrix-wrap"><table class="matrix"><thead><tr><th>Period</th><th>Months</th></tr></thead><tbody>'
+           + "".join(f'<tr><td class="d">{C.icon(C.PERIOD_ICON[p])} {p}</td><td>{C.PERIOD_MONTHS[p]}</td></tr>' for p in PERIODS)
+           + '</tbody></table></div>')
 
-    st.markdown("### Assumptions not yet settled by the group")
-    C.note("<b>Rankings are conditional on these interpretations</b> (project README §7):<br>"
-           "<b>A</b> · M2 multiplied by 3.6 (printed result read as kWh → MJ)<br>"
+    C.section("model_training", "5 · The sixteen models",
+              "Published coefficients from Karale et al. (2026), Table 2 — nothing is calibrated")
+    rows = "".join(f'<tr><td class="d">{m}</td><td>{escape(a)}</td><td class="eqcell">{escape(C.equation(m))}</td>'
+                   f'<td>{C.MODEL_PROFILE[m][0]}</td></tr>' for m, (a, _) in MODEL_INFO.items())
+    C.html('<div class="matrix-wrap"><table class="matrix"><thead><tr><th>Model</th><th>Source</th>'
+           '<th>Equation (Rs, Ra in MJ m⁻² d⁻¹)</th><th>Inputs</th></tr></thead><tbody>' + rows + '</tbody></table></div>')
+
+    C.section("report", "Assumptions not yet settled by the group",
+              "Rankings are conditional on these interpretations (README §7)", tone="warn")
+    C.note("<b>A</b> · M2 multiplied by 3.6 (printed result read as kWh → MJ)<br>"
            "<b>B</b> · M8 uses Θ = Tmin/Tmax (Θ is undefined in the paper)<br>"
            "<b>C</b> · M16 in the paper's printed form (no √ΔT)<br>"
            "<b>D</b> · R² = 1 − SSE/SST, the paper's formula (its printed values behave like r²)<br>"
            "<b>E</b> · MBE enters the GPI with its sign, as in the paper")
 
-    with st.expander("Uploaded data — what differs from the demonstration districts"):
+    with st.expander(":material/upload_file: Uploaded data — what differs from the demonstration districts"):
         st.markdown("- The satellite sunshine-record check is **not** applied (it needs NASA POWER data). "
                     "Years with < 200 sunshine values are flagged.\n"
                     "- All dates in the file are used (the demo uses 2002–2023).\n"
                     "- Rows with a duplicated date are all excluded; rows with an invalid date are excluded.\n"
                     "- Temperatures outside −10 … 55 °C are flagged but kept.\n"
+                    "- Columns are assigned automatically only when exactly one column matches.\n"
                     "- Latitude is entered by the user.")
 
-    with st.expander("Technical details — equations"):
+    with st.expander(":material/functions: Technical details — equations"):
         st.markdown("**Solar geometry** (J = day of year, φ = latitude in radians, Gsc = 0.0820 MJ m⁻² min⁻¹)")
         st.latex(r"d_r = 1 + 0.033\cos\!\left(\tfrac{2\pi J}{365}\right),\quad "
                  r"\delta = 0.409\sin\!\left(\tfrac{2\pi J}{365} - 1.39\right),\quad "
@@ -441,9 +537,11 @@ def methodology():
         st.caption("Ties share the better rank. If all models have the same value of one indicator, "
                    "the scaling is undefined and the GPI is not computed.")
 
-    st.markdown("### Limitations")
-    st.markdown("- The reference is **estimated** from sunshine hours, not measured radiation.\n"
-                "- Surat and Deesa have no usable sunshine record, so they are not ranked.\n"
-                "- None of the five stations is in the paper; no direct numerical reproduction is possible.\n"
-                "- NASA POWER satellite data were used only to check sunshine records, never as the reference.")
+    C.section("info", "Limitations")
+    C.html('<div class="card-grid">'
+           + _card("sensors", "Estimated reference", "<p>The reference is estimated from sunshine hours, not measured radiation.</p>")
+           + _card("cloud_off", "Two districts unranked", "<p>Surat and Deesa have no usable sunshine record.</p>", "bad")
+           + _card("travel_explore", "No direct reproduction", "<p>None of the five stations is in the paper.</p>")
+           + _card("satellite_alt", "NASA POWER", "<p>Used only to check sunshine records, never as the reference.</p>")
+           + '</div>')
     C.footer()
