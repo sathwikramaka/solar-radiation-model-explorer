@@ -10,7 +10,8 @@ from engine.config import (DISTRICTS, LATITUDE, MODELS, PERIODS, SEASON_OF_MONTH
                            FIRST_YEAR, LAST_YEAR, A_AP, B_AP)
 from engine.models import MODEL_INFO
 from engine.pipeline import prepare_days, evaluate_all_periods, top3
-from engine.validation import read_table, detect_columns, build_input, exclusion_reasons, TEMPLATE
+from engine.validation import (read_table, detect_columns, ambiguous_columns, build_input,
+                               exclusion_reasons, TEMPLATE)
 from ui import components as C
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -244,6 +245,12 @@ def upload():
     st.dataframe(raw.head(6), hide_index=True, width="stretch")
     cols = [None] + list(raw.columns)
     found = detect_columns(list(raw.columns))
+    ambiguous = {v: c for v, c in ambiguous_columns(list(raw.columns)).items()
+                 if not (found["Date"] is not None and v in ("Year", "Month", "Day"))}
+    if ambiguous:
+        C.checks([("warning", f"Several columns could be {v}: " + ", ".join(f"“{x}”" for x in c)
+                   + ". It was not assigned automatically — please choose the right one below.")
+                  for v, c in ambiguous.items()])
     mode = st.radio("Date given as", ["One date column", "Year, Month and Day columns"], horizontal=True,
                     index=0 if found["Date"] is not None or found["Year"] is None else 1, key="up_mode")
 

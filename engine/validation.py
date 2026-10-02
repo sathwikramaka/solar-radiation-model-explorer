@@ -70,27 +70,42 @@ def read_table(filename, data):
     return sheets
 
 
-def detect_columns(columns):
-    """Guess which column holds each variable. Returns {variable: column or None}."""
-    found, taken = {}, set()
+KEYWORDS = {"Date": lambda n: "date" in n,
+            "Tmax": lambda n: "max" in n and "min" not in n,
+            "Tmin": lambda n: "min" in n and "max" not in n,
+            "SSH":  lambda n: "sunshine" in n or "ssh" in n or "bss" in n}
+
+
+def column_candidates(columns):
+    """Columns that could hold each variable: exact name matches first, otherwise keyword matches."""
     normed = {c: _norm(c) for c in columns}
-    for var in VARIABLES:                                   # 1. exact alias match
-        found[var] = next((c for c in columns if c not in taken and normed[c] in ALIASES[var]), None)
-        if found[var] is not None:
-            taken.add(found[var])
-    keywords = {"Date": lambda n: "date" in n,              # 2. keyword match for the rest
-                "Tmax": lambda n: "max" in n and "min" not in n,
-                "Tmin": lambda n: "min" in n and "max" not in n,
-                "SSH":  lambda n: "sunshine" in n or "ssh" in n or "bss" in n}
-    for var, test in keywords.items():
-        if found[var] is None:
-            found[var] = next((c for c in columns if c not in taken and test(normed[c])), None)
-            if found[var] is not None:
-                taken.add(found[var])
+    cands = {}
+    for var in VARIABLES:
+        exact = [c for c in columns if normed[c] in ALIASES[var]]
+        cands[var] = exact or [c for c in columns if var in KEYWORDS and KEYWORDS[var](normed[c])]
+    return cands
+
+
+def detect_columns(columns):
+    """Assign a column to a variable only when exactly one column matches it (never a silent guess).
+
+    Returns {variable: column or None}. Use `ambiguous_columns` to tell the user why a variable is unassigned.
+    """
+    cands = column_candidates(columns)
+    found = {var: c[0] if len(c) == 1 else None for var, c in cands.items()}
+    used = [c for c in found.values() if c is not None]
+    for var, col in found.items():                          # one column cannot serve two variables
+        if col is not None and used.count(col) > 1:
+            found[var] = None
     if found["Date"] is not None:                           # a full date column wins over Y/M/D
         for var in ("Year", "Month", "Day"):
             found[var] = None
     return found
+
+
+def ambiguous_columns(columns):
+    """{variable: [candidate columns]} for variables with more than one possible column."""
+    return {var: c for var, c in column_candidates(columns).items() if len(c) > 1}
 
 
 def parse_dates(col, dayfirst=True):
