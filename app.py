@@ -8,7 +8,8 @@ st.set_page_config(page_title="Solar Radiation Model Explorer", page_icon=":mate
 
 from ui import styles, pages  # noqa: E402  (after set_page_config)
 
-styles.apply()
+styles.apply()          # light/dark palette from st.session_state["theme"]
+styles.theme_toggle()   # sun/moon switch, pinned top-right
 pages.NAV.update(
     overview=st.Page(pages.overview, title="Overview", icon=":material/home:", url_path="overview", default=True),
     explorer=st.Page(pages.explorer, title="Model Explorer", icon=":material/insights:", url_path="explorer"),
