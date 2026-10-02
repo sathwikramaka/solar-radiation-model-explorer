@@ -1,0 +1,9 @@
+# Raw IMD data: redistribution rights not confirmed (decision D7)
+data/private/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.streamlit/secrets.toml
+.claude-flow/
+data/demo/model_registry.csv

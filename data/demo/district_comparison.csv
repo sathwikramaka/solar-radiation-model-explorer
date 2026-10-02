@@ -1,0 +1,6 @@
+district,days used,Top 3 Annual,Top 3 Winter,Top 3 Pre-Monsoon,Top 3 Monsoon,Top 3 Post-Monsoon,annual rank-1 R2,annual rank-1 RMSE
+Surat,0,n/a (no valid A-P reference),n/a (no valid A-P reference),n/a (no valid A-P reference),n/a (no valid A-P reference),n/a (no valid A-P reference),,
+Ahmedabad,8013,"M1, M13, M15","M15, M1, M14","M15, M1, M5","M2, M8, M1","M15, M1, M13",0.54,3.32
+Amreli,5437,"M1, M13, M15","M15, M14, M1","M15, M1, M12","M1, M8, M2","M15, M13, M1",0.33,3.67
+Deesa,0,n/a (no valid A-P reference),n/a (no valid A-P reference),n/a (no valid A-P reference),n/a (no valid A-P reference),n/a (no valid A-P reference),,
+Okha,7040,"M5, M3, M6","M4, M14, M9","M14, M12, M6","M13, M1, M15","M4, M14, M12",-0.08,4.83

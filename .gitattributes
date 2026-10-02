@@ -1,0 +1,3 @@
+# Keep LF line endings in the repository (Streamlit Community Cloud runs Linux)
+* text=auto eol=lf
+*.xlsx binary
