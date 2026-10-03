@@ -1,0 +1,25 @@
+station,check,count,records
+Ahmedabad,missing Tmax,9,14973
+Ahmedabad,missing Tmin,7,14973
+Ahmedabad,missing sunshine,42,14973
+Ahmedabad,Tmax <= Tmin,0,14973
+Ahmedabad,sunshine below zero,0,14973
+Ahmedabad,sunshine exceeds N,114,14973
+Ahmedabad,all models non-finite,15,14973
+Ahmedabad,included daily records,14802,14973
+Amreli,missing Tmax,2,14959
+Amreli,missing Tmin,13,14959
+Amreli,missing sunshine,87,14959
+Amreli,Tmax <= Tmin,0,14959
+Amreli,sunshine below zero,0,14959
+Amreli,sunshine exceeds N,139,14959
+Amreli,all models non-finite,15,14959
+Amreli,included daily records,14718,14959
+Okha,missing Tmax,105,14958
+Okha,missing Tmin,5,14958
+Okha,missing sunshine,351,14958
+Okha,Tmax <= Tmin,0,14958
+Okha,sunshine below zero,0,14958
+Okha,sunshine exceeds N,26,14958
+Okha,all models non-finite,109,14958
+Okha,included daily records,14474,14958
