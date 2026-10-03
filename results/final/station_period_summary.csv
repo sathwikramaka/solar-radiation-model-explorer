@@ -1,0 +1,16 @@
+station,period,valid_days,first_valid_date,last_valid_date
+Ahmedabad,Annual,14802,1985-01-01,2025-12-23
+Ahmedabad,Winter,2398,1985-01-01,2025-02-28
+Ahmedabad,Pre-Monsoon,3741,1985-03-01,2025-05-31
+Ahmedabad,Monsoon,4989,1985-06-01,2025-09-30
+Ahmedabad,Post-Monsoon,3674,1985-10-01,2025-12-23
+Amreli,Annual,14718,1985-01-01,2025-12-31
+Amreli,Winter,2362,1985-01-01,2025-02-28
+Amreli,Pre-Monsoon,3753,1985-03-01,2025-05-31
+Amreli,Monsoon,4962,1985-06-01,2025-09-30
+Amreli,Post-Monsoon,3641,1985-10-01,2025-12-31
+Okha,Annual,14474,1985-01-01,2025-12-31
+Okha,Winter,2402,1985-01-01,2025-02-28
+Okha,Pre-Monsoon,3634,1985-03-01,2025-05-31
+Okha,Monsoon,4733,1985-06-01,2025-09-30
+Okha,Post-Monsoon,3705,1985-10-01,2025-12-31

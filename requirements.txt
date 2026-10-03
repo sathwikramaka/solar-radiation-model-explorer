@@ -1,6 +1,5 @@
-# Runtime dependencies (exact versions tested; Python 3.12)
-streamlit==1.64.0
-pandas==3.0.5
 numpy==2.5.2
-plotly==7.1.0
-openpyxl==3.1.5
+pandas==3.0.5
+matplotlib==3.11.1
+ipykernel==7.3.0
+notebook>=7.0,<8.0

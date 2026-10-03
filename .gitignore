@@ -1,9 +1,16 @@
-# Raw IMD data: redistribution rights not confirmed (decision D7)
-data/private/
 __pycache__/
-*.pyc
+*.py[cod]
+.ipynb_checkpoints/
 .pytest_cache/
 .venv/
-.streamlit/secrets.toml
+venv/
+.env
+.env.*
+.claude/
 .claude-flow/
-data/demo/model_registry.csv
+.ipython-notebook-runtime/
+.DS_Store
+Thumbs.db
+
+data/raw_imd/
+results/final/daily_predictions.csv

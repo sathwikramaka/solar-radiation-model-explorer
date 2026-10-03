@@ -1,0 +1,4 @@
+station,source_file,source_records,source_first_date,source_last_date,source_unique_dates,missing_calendar_dates_in_span,usable_daily_records,usable_first_date,usable_last_date,analysis_period
+Ahmedabad,data/raw_imd/AHMEDABAD.csv,14973,1985-01-01,2025-12-31,14973,2,14802,1985-01-01,2025-12-23,1985-2025
+Amreli,data/raw_imd/AMRELI.csv,14959,1985-01-01,2025-12-31,14959,16,14718,1985-01-01,2025-12-31,1985-2025
+Okha,data/raw_imd/OKHA.csv,14958,1985-01-01,2025-12-31,14958,17,14474,1985-01-01,2025-12-31,1985-2025
