@@ -133,8 +133,8 @@ def test_upload_path_reproduces_validated_ahmedabad():
     assert len(excluded) == 0
     days = prepare_days(clean, LATITUDE["Ahmedabad"])
     ours = evaluate_all_periods(days, "Ahmedabad")
-    demo = Path(__file__).resolve().parents[1] / "data" / "demo"
-    val = pd.concat([pd.read_csv(demo / "annual_gpi.csv"), pd.read_csv(demo / "seasonal_gpi.csv")])
+    project = Path(__file__).resolve().parents[2]
+    val = pd.read_csv(project / "results" / "final" / "all_metrics.csv").rename(columns={"station": "district"})
     m = val[val.district == "Ahmedabad"].merge(ours, on=["period", "model"])
     assert len(m) == 80
     for col in ["R2", "RMSE", "MAE", "MBE", "GPI", "rank"]:

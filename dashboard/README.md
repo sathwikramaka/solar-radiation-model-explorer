@@ -1,31 +1,48 @@
 # Solar Radiation Model Explorer
 
-This existing Streamlit application presents the validated results for the MSc project *Comparative evaluation of temperature-based solar radiation models using global performance indicator*. The project evaluates Ahmedabad, Amreli and Okha using station-specific daily records from 1985–2025, five periods and 16 models.
+Streamlit dashboard for the MSc study *Comparative evaluation of temperature-based solar radiation models using global performance indicator*.
 
-The app is a consumer of the validated project results. Its bundled `data/demo/` files are summaries generated from `../results/final/`; they do not contain source daily observations. Scientific definitions and analysis are maintained in the root `solar_radiation_analysis.ipynb` notebook.
+## Official study results
 
-## Method
+The dashboard reads the validated exports produced by the root `solar_radiation_analysis.ipynb` notebook. The notebook is the only authoritative source for the official analysis; this application does not recalculate its 240 result rows or rankings.
 
-The reference is the supplied Karale et al. (2026) paper's Eq. 5 (p. 5):
+- Stations: Ahmedabad, Amreli and Okha only.
+- Data coverage: station-specific valid observations from 1985–2025.
+- Periods: Annual, Winter (January–February), Pre-Monsoon (March–May), Monsoon (June–September) and Post-Monsoon (October–December).
+- Models: M1–M16.
+- Official table: `../results/final/all_metrics.csv` (3 stations × 5 periods × 16 models).
+- Top-3, station comparisons and valid-date coverage are read from their corresponding notebook exports under `../results/`.
 
-\[
-R_{s,AP}=\left(0.25+0.50\frac{n}{N}\right)R_a,
-\]
+The reference is exactly:
 
-where (n) is actual bright sunshine duration, (N=24\omega_s/\pi) is maximum sunshine duration and (R_a) is extraterrestrial radiation. Only rows with valid Tmax, Tmin, sunshine, (Tmax>Tmin), (0\le n\le N), and finite estimates from all models are included. All dates are used; no shared station period or year blacklist is applied. Each station-period needs at least 30 valid days.
+```text
+Rs = Ra [0.25 + 0.50(n/N)]
+```
 
-For the primary results, the study's cited solar-geometry equation calculates (N) in hours from the sunset hour angle and calculates (R_a) in MJ m⁻² day⁻¹ from latitude and day of year. The study prints (d_r=1+0.003\cos(2\pi J/365)); the notebook and dashboard upload engine use that printed coefficient. Measured sunshine hours are used directly as (n), without conversion.
+Here `Rs` is estimated global solar radiation, `Ra` is extraterrestrial radiation, `n` is measured sunshine duration in hours, and `N` is maximum possible sunshine duration in hours. Official dashboard views display the exported results; they do not recalculate `Ra`, `N`, the reference, model metrics or GPI.
 
-Metrics are RMSE, MAE, signed MBE and (R^2=1-SSE/SST). The GPI min–max scales the four metrics across 16 models within each station-period and applies the paper's directions, α=-1 for R² and +1 for RMSE, MAE and signed MBE. GPI is an unweighted sum; ties share the best rank. A constant metric contributes zero. The paper's statement that MBE should be close to zero conflicts with its printed GPI direction for signed MBE. M2's output units and M8's Θ are not defined in the supplied study; the implementation assumptions and sensitivity results are documented in the project README and model registry.
+## Dashboard views
 
-See the project README and `../results/validation/sensitivity_analysis.csv` for data coverage, equations, exclusions, limitations and ranking sensitivity.
+- Overview: annual comparison, seasonal Top-3 matrix, leading models and station-specific coverage dates/counts.
+- Model Explorer: station and period filters; all 16 models; R², RMSE, MAE, MBE, GPI and notebook ranks; station comparisons; and downloads of notebook exports.
+- Methodology: equations, model registry, data rules, GPI directions and documented interpretation notes.
+- Upload & Analyze: separate exploratory calculations for a user-supplied file. It uses the notebook-exported model registry and the finalized method conventions where applicable. It never changes the official study tables or rankings.
+
+Daily source observations are not included in the repository. If a local notebook run has created `../results/final/daily_predictions.csv`, the Explorer can show its optional daily comparison; otherwise that view explains why daily values are unavailable. The summary views work from the checked-in aggregate exports.
 
 ## Run locally
 
-Python 3.11 or newer. Install `requirements.txt`, then run:
+From this directory, install the dashboard dependencies and start Streamlit:
 
 ```bash
+python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Run the scientific pipeline from the project root notebook `solar_radiation_analysis.ipynb` using **Kernel → Restart Kernel and Run All**. Tests are in `tests/` and can be run from this dashboard directory with `pytest`.
+Run the dashboard tests with:
+
+```bash
+python -m pytest -q
+```
+
+To regenerate official results, run the root notebook with **Kernel → Restart Kernel and Run All**. The optional upload workflow is not a substitute for that notebook pipeline.

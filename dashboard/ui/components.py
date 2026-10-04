@@ -1,8 +1,4 @@
-"""Reusable building blocks: HTML cards, Plotly charts and the shared results view.
-
-The results view is used twice — for the five demonstration districts and for an uploaded file —
-so both always look and behave the same. Everything here only *displays* engine output.
-"""
+"""Reusable building blocks for official notebook results and separate uploaded-data analysis."""
 from html import escape
 
 import numpy as np
@@ -284,11 +280,11 @@ def model_period_bars(results, model):
     return fig
 
 
-def annual_gpi_dots(results, districts):
-    """Annual GPI of all 16 models in each ranked district (one dot per district)."""
+def annual_gpi_dots(results, stations):
+    """Annual GPI of all 16 models in each ranked station (one dot per station)."""
     p = S.P()
     fig = go.Figure()
-    for i, d in enumerate(districts[:3]):
+    for i, d in enumerate(stations[:3]):
         t = results[(results.district == d) & (results.period == "Annual")].set_index("model").reindex(MODELS)
         fig.add_trace(go.Scatter(x=MODELS, y=t.GPI, name=d, mode="markers",
                                  marker=dict(size=13, color=p["series"][i], line=dict(width=2, color=p["surface"])),
@@ -367,7 +363,8 @@ STATUS_TEXT = {"no valid reference data": "No day in this period passed all incl
                                           "to compare the models reliably. Try another period or a longer record."}
 
 
-def results_view(results, period, metric, key, context, days=None, unavailable_reason=None, daily_note=None):
+def results_view(results, period, metric, key, context, days=None, unavailable_reason=None, daily_note=None,
+                 top3_rows=None):
     """KPIs, Top 3, ranking, model profile, all metrics, seasonal comparison and observed-vs-predicted for one site."""
     table = results[results.period == period]
     status = table.status.iloc[0] if len(table) else "no valid reference data"
@@ -381,7 +378,12 @@ def results_view(results, period, metric, key, context, days=None, unavailable_r
           ("R²", f"{best.R2:.2f}", "1 − SSE/SST", "insights", False),
           ("Days evaluated", f"{int(best.n):,}", PERIOD_MONTHS[period], "event_available", False)])
     section("military_tech", "Top 3 models", f"Highest GPI · {context}", tone="sun")
-    podium(table[table["rank"] <= 3].sort_values("rank"), context)
+    if top3_rows is None:
+        podium(table[table["rank"] <= 3].sort_values("rank"), context)
+    else:
+        stations = results["district"].dropna().unique()
+        selected_top3 = top3_rows[(top3_rows.district.isin(stations)) & (top3_rows.period == period)]
+        podium(selected_top3.sort_values("rank"), context)
 
     tabs = st.tabs([":material/leaderboard: Ranking", ":material/model_training: Model profile",
                     ":material/table_chart: All metrics", ":material/date_range: Seasonal comparison",
@@ -405,7 +407,7 @@ def results_view(results, period, metric, key, context, days=None, unavailable_r
             chart(season_dots(results, metric, chosen), f"{key}_season")
     with tabs[4]:
         if days is None:
-            state("empty", "lock", "Daily values are not part of the public demo",
+            state("empty", "lock", "Daily observations are not included in this deployment",
                   daily_note or "The raw IMD station data are not redistributed, so the day-by-day comparison is "
                                 "hidden here. Upload your own data on <b>Upload &amp; Analyze</b> to see this chart.")
         else:

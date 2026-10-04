@@ -6,4 +6,3 @@ __pycache__/
 .venv/
 .streamlit/secrets.toml
 .claude-flow/
-data/demo/model_registry.csv
