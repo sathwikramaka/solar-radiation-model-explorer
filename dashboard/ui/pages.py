@@ -1,7 +1,4 @@
-"""The four pages: Overview, Model Explorer, Upload & Analyze, Methodology.
-
-Pages only display engine output; every number comes from data/demo/ or from the engine run on an upload.
-"""
+"""The four pages: official notebook results, exploratory upload analysis, and methodology."""
 import hashlib
 import io
 from html import escape
@@ -18,8 +15,10 @@ from engine.validation import (read_table, detect_columns, ambiguous_columns, bu
 from ui import components as C
 
 ROOT = Path(__file__).resolve().parents[1]
-DEMO = ROOT / "data" / "demo"
-PRIVATE_DAILY = ROOT / "data" / "private" / "daily_predictions.csv"
+PROJECT_ROOT = ROOT.parent
+FINAL = PROJECT_ROOT / "results" / "final"
+QC = PROJECT_ROOT / "results" / "qc"
+PRIVATE_DAILY = FINAL / "daily_predictions.csv"
 NAV = {}   # page objects, filled by app.py (used for in-page links)
 
 DISTRICT_NOTE = {station: "station-specific valid daily records, 1985–2025" for station in DISTRICTS}
@@ -33,18 +32,50 @@ METHOD_STEPS = [("dataset", "Input", "Tmax, Tmin, sunshine, latitude"), ("fact_c
 
 # ================================================================= data
 @st.cache_data(show_spinner=False)
-def load_demo():
-    results = pd.concat([pd.read_csv(DEMO / "annual_gpi.csv"), pd.read_csv(DEMO / "seasonal_gpi.csv")],
-                        ignore_index=True)
-    return results, pd.read_csv(DEMO / "district_comparison.csv")
+def load_official_results():
+    """Load the notebook's exported results; this page does not recalculate official rankings."""
+    required = [FINAL / name for name in ("all_metrics.csv", "top_3_models.csv", "station_comparison.csv",
+                                          "station_period_summary.csv")]
+    required += [QC / "data_provenance.csv"]
+    missing = [path for path in required if not path.is_file()]
+    if missing:
+        raise FileNotFoundError("Notebook result export(s) missing: " + ", ".join(str(path) for path in missing))
+
+    results = pd.read_csv(FINAL / "all_metrics.csv")
+    top3_results = pd.read_csv(FINAL / "top_3_models.csv")
+    comparison = pd.read_csv(FINAL / "station_comparison.csv")
+    period_coverage = pd.read_csv(FINAL / "station_period_summary.csv")
+    coverage = pd.read_csv(QC / "data_provenance.csv")
+
+    expected_stations = set(DISTRICTS)
+    expected_periods = set(PERIODS)
+    expected_models = set(MODELS)
+    if (len(results) != 240 or results[["station", "period", "model"]].duplicated().any()
+            or set(results.station) != expected_stations or set(results.period) != expected_periods
+            or set(results.model) != expected_models or not (results.status == "ok").all()):
+        raise ValueError("Notebook all_metrics.csv does not match the validated 3 × 5 × 16 study design.")
+    if set(top3_results.station) != expected_stations or set(top3_results.period) != expected_periods:
+        raise ValueError("Notebook top_3_models.csv does not match the validated study stations and periods.")
+    if len(comparison) != 3 or set(comparison.station) != expected_stations:
+        raise ValueError("Notebook station_comparison.csv does not contain exactly the three study stations.")
+    if len(period_coverage) != 15 or set(period_coverage.station) != expected_stations:
+        raise ValueError("Notebook station_period_summary.csv does not contain all 15 station-periods.")
+    if set(coverage.station) != expected_stations:
+        raise ValueError("Notebook data_provenance.csv does not match the three study stations.")
+
+    return (results.rename(columns={"station": "district"}),
+            comparison.rename(columns={"station": "district", "valid_days": "days used"}),
+            top3_results.rename(columns={"station": "district"}),
+            coverage.rename(columns={"station": "district"}), period_coverage)
 
 
 @st.cache_data(show_spinner=False)
-def load_demo_daily():
-    """Daily values are private (raw IMD data, decision D7): returns {} when the file is absent."""
+def load_official_daily():
+    """Load the optional local daily export; it is excluded from public Git because it contains raw observations."""
     if not PRIVATE_DAILY.exists():
         return {}
     d = pd.read_csv(PRIVATE_DAILY, parse_dates=["Date"])
+    d = d.rename(columns={"station": "district"})
     return {k: g.reset_index(drop=True) for k, g in d.groupby("district")}
 
 
@@ -74,14 +105,14 @@ def ranked_districts(results):
     return [d for d in DISTRICTS if d in ok]
 
 
-def winner_matrix(results):
-    """District x period table of the Top 3 (rank 1 highlighted), straight from the validated results."""
+def winner_matrix(top3_results):
+    """Station × period Top 3 table, read directly from the notebook export."""
     head = "".join(f'<th>{C.icon(C.PERIOD_ICON[p])}{p}</th>' for p in PERIODS)
     rows = ""
     for d in DISTRICTS:
         cells = ""
         for p in PERIODS:
-            t = results[(results.district == d) & (results.period == p) & (results["rank"] <= 3)].sort_values("rank")
+            t = top3_results[(top3_results.district == d) & (top3_results.period == p)].sort_values("rank")
             cells += ("<td>" + " · ".join(f'<span class="m1">{m}</span>' if i == 0 else m for i, m in enumerate(t.model))
                       + "</td>") if len(t) else '<td class="na">reference unavailable</td>'
         rows += f'<tr><td class="d">{d}</td>{cells}</tr>'
@@ -91,7 +122,7 @@ def winner_matrix(results):
 
 # ================================================================= Overview
 def overview():
-    results, comparison = load_demo()
+    results, comparison, top3_results, coverage, _ = load_official_results()
     ranked = ranked_districts(results)
     C.hero("MSc Agriculture Analytics · Gujarat, India", "Solar Radiation<br><span>Model Explorer</span>",
            "Comparative analysis of 16 solar-radiation estimation models across seasons and locations — "
@@ -104,7 +135,7 @@ def overview():
     c2.page_link(NAV["upload"], label="Analyze your own data", icon=":material/upload_file:")
     c3.page_link(NAV["method"], label="How it works", icon=":material/menu_book:")
 
-    t3 = results[(results.status == "ok") & (results["rank"] <= 3)]
+    t3 = top3_results[top3_results.status == "ok"]
     counts = t3.model.value_counts()
     leaders = list(counts[counts == counts.max()].index)
     cells = t3.groupby(["district", "period"]).ngroups
@@ -123,7 +154,7 @@ def overview():
     C.chart(C.annual_gpi_dots(results, ranked), "ov_annual")
 
     C.section("date_range", "Seasonal comparison", "Top 3 models in every station and period · highlighted = rank 1")
-    winner_matrix(results)
+    winner_matrix(top3_results)
 
     C.section("military_tech", "Top 3 models", "Pick a station and a period", tone="sun")
     a, b = st.columns([1, 1.6])
@@ -132,21 +163,24 @@ def overview():
                                  format_func=lambda x: f":material/location_on: {x}") or ranked[0]
     with b:
         p = C.period_picker("ov_p")
-    t = results[(results.district == d) & (results.period == p)]
-    if (t.status == "ok").all():
-        C.podium(t[t["rank"] <= 3].sort_values("rank"), f"{d} · {p}")
+    t = top3_results[(top3_results.district == d) & (top3_results.period == p)]
+    if len(t):
+        C.podium(t.sort_values("rank"), f"{d} · {p}")
     else:
-        C.unavailable(C.STATUS_TEXT.get(t.status.iloc[0], t.status.iloc[0]))
+        C.unavailable(C.STATUS_TEXT["no valid reference data"])
 
     C.section("map", "Study stations", "IMD daily records, 1985–2025")
     cards = ""
+    coverage_by_station = coverage.set_index("district")
     for dist in DISTRICTS:
         row = comparison[comparison.district == dist].iloc[0]
+        span = coverage_by_station.loc[dist]
         ok = row["days used"] > 0
         chip = (f'<span class="chip ok">{C.icon("check_circle")}Ranked</span>' if ok else
                 f'<span class="chip na">{C.icon("cloud_off")}Reference unavailable</span>')
         cards += (f'<div class="district"><div class="name">{C.icon("location_on")}{dist}</div>{chip}'
-                  f'<div class="meta">{LATITUDE[dist]:.2f}° N · {int(row["days used"]):,} days<br>{DISTRICT_NOTE[dist]}'
+                  f'<div class="meta">{LATITUDE[dist]:.2f}° N · {int(row["days used"]):,} valid days<br>'
+                  f'{span.usable_first_date} – {span.usable_last_date}<br>{DISTRICT_NOTE[dist]}'
                   f'<br>Annual Top 3: <b>{row["Top 3 Annual"] if ok else "—"}</b></div></div>')
     C.html(f'<div class="district-grid">{cards}</div>')
 
@@ -160,11 +194,11 @@ def overview():
 
 # ================================================================= Model Explorer
 def explorer():
-    results, _ = load_demo()
-    daily = load_demo_daily()
+    results, _, top3_results, _, _ = load_official_results()
+    daily = load_official_daily()
     C.page_header("insights", "Validated project results", "Model Explorer",
-                  "All 16 models at the three retained Gujarat IMD stations, regenerated from their daily records. "
-                  "Choose a station, a season and a metric.")
+                  "The 240 validated station–period–model rows exported by the analysis notebook. "
+                  "Choose a station, a period and a metric.")
     with st.container(key="ex_filters"):
         c1, c2 = st.columns([1.1, 1])
         with c1:
@@ -176,7 +210,7 @@ def explorer():
 
     C.section(C.PERIOD_ICON[period], f"{district} · {period}", f"{C.PERIOD_MONTHS[period]} · {LATITUDE[district]:.2f}° N")
     C.results_view(results[results.district == district], period, metric, key="ex", context=f"{district} · {period}",
-                   days=daily.get(district))
+                   days=daily.get(district), top3_rows=top3_results)
 
     C.section("compare_arrows", "Station comparison",
               f"{C.label(metric)} of every model at each station · {period} · {C.METRIC_INFO[metric][1]} · "
@@ -186,13 +220,21 @@ def explorer():
         .reindex(index=MODELS, columns=DISTRICTS)
     C.chart(C.metric_heatmap(pivot, metric), "ex_cross")
     C.section("table_chart", "Top 3 in every station and period", "highlighted = rank 1")
-    winner_matrix(results)
+    winner_matrix(top3_results)
 
     with st.expander(":material/download: Download the validated results (CSV)"):
-        cols = st.columns(4)
-        for col, name in zip(cols, ["annual_gpi", "seasonal_gpi", "top_3_models", "model_ranking"]):
-            col.download_button(name.replace("_", " ").title(), (DEMO / f"{name}.csv").read_bytes(),
-                                f"{name}.csv", "text/csv", key=f"dl_{name}", width="stretch")
+        exports = [("All 240 results", FINAL / "all_metrics.csv"),
+                   ("Annual results", FINAL / "annual_gpi.csv"),
+                   ("Seasonal results", FINAL / "seasonal_gpi.csv"),
+                   ("Top 3 models", FINAL / "top_3_models.csv"),
+                   ("Model ranks", FINAL / "model_ranking.csv"),
+                   ("Station coverage", FINAL / "station_period_summary.csv"),
+                   ("Station comparison", FINAL / "station_comparison.csv")]
+        for start in range(0, len(exports), 4):
+            cols = st.columns(min(4, len(exports) - start))
+            for col, (label, path) in zip(cols, exports[start:start + 4]):
+                col.download_button(label, path.read_bytes(), path.name, "text/csv",
+                                    key=f"dl_{path.stem}", width="stretch")
     C.footer()
 
 
@@ -283,8 +325,10 @@ def _upload_intro():
 
 def upload():
     C.page_header("upload_file", "Run the method on your data", "Upload & Analyze",
-                  "Upload daily station data and run the same validated engine: 16 models, RMSE, MAE, MBE, R², GPI and "
-                  "ranking for the year and each season. Your values are never altered.")
+                  "Exploratory analysis for a file you provide. It applies the finalized model definitions and method "
+                  "where applicable, but these calculations do not change or replace the official notebook exports.")
+    C.note("<b>Separate from the official study.</b> The official Ahmedabad, Amreli and Okha results below the "
+           "Model Explorer are read from the validated notebook exports. This page analyzes only your uploaded file.", "info")
     step_slot = st.empty()
     _upload_intro()
     t1, t2, _ = st.columns([1, 1, 2.2])
@@ -452,8 +496,8 @@ def _card(ic, title, body, tone=""):
 
 def methodology():
     C.page_header("menu_book", "How the results are produced", "Methodology",
-                  "The dashboard implements the final project notebook without changes. Each step maps to one file in "
-                  "the engine/ folder.")
+                  "Official study values come from the validated notebook exports. Upload & Analyze is a separate "
+                  "exploratory workflow and does not regenerate the published station rankings.")
     C.flow(METHOD_STEPS)
 
     C.section("account_tree", "The pipeline", first=True)
@@ -465,7 +509,7 @@ def methodology():
                    f"<p style='margin-top:.4rem'>A period needs ≥ {MIN_DAYS} days. Nothing is filled, clipped or recalibrated.</p>")
            + _card("public", "3 · Solar geometry", "<p>Extraterrestrial radiation <b>Ra</b> and maximum day length <b>N</b> "
                    "from latitude and day of year, following the solar-geometry equation cited by the study.</p>")
-           + _card("wb_sunny", "4 · A–P reference", "<p><b>Rs = (0.25 + 0.50·n/N)·Ra</b> — the sunshine-based standard of the "
+           + _card("wb_sunny", "4 · A–P reference", "<p><b>Rs = Ra [0.25 + 0.50(n/N)]</b> — the sunshine-based standard of the "
                    "paper. It is <i>estimated</i>, not measured, radiation.</p>", "sun")
            + _card("analytics", "6 · Metrics", "<ul><li><b>RMSE</b> — typical error size, penalises large errors (best 0)</li>"
                    "<li><b>MAE</b> — average error size (best 0)</li><li><b>MBE</b> — bias; + over, − under (best 0)</li>"
@@ -495,9 +539,10 @@ def methodology():
            "<b>R² and MBE</b> · results use the printed formulas; the paper's table/prose is internally inconsistent. "
            "See the sensitivity table before interpreting rankings.")
 
-    with st.expander(":material/upload_file: Uploaded data — what differs from the demonstration stations"):
-        st.markdown("- The same row-level inclusion rules are used for project and uploaded data.\n"
-                    "- All supplied dates are evaluated; project station files span 1985–2025 with unequal daily coverage.\n"
+    with st.expander(":material/upload_file: Uploaded data — separate exploratory results"):
+        st.markdown("- Official station results on the Overview and Model Explorer pages come directly from the notebook exports.\n"
+                    "- This upload workflow calculates results for the uploaded file only; it never updates official results.\n"
+                    "- All supplied dates are evaluated; the official station files span 1985–2025 with unequal valid-day coverage.\n"
                     "- Rows with a duplicated date are all excluded; rows with an invalid date are excluded.\n"
                     "- Temperatures outside −10 … 55 °C are flagged but kept.\n"
                     "- Columns are assigned automatically only when exactly one column matches.\n"
@@ -512,15 +557,17 @@ def methodology():
                  r"\left[\omega_s \sin\varphi \sin\delta + \cos\varphi \cos\delta \sin\omega_s\right]")
         st.caption("The primary analysis follows the 0.003 coefficient printed in the cited study's solar-geometry equation.")
         st.markdown("**Reference**")
-        st.latex(r"R_{s,AP} = \left(0.25 + 0.50\,\tfrac{n}{N}\right) R_a \qquad (0 \le n \le N)")
+        st.latex(r"R_s = R_a\left[0.25 + 0.50\left(\tfrac{n}{N}\right)\right],\qquad 0 \le n \le N")
+        st.markdown("Here, $R_s$ is estimated global solar radiation, $R_a$ is extraterrestrial radiation, $n$ is "
+                    "measured sunshine duration in hours, and $N$ is maximum possible sunshine duration in hours.")
         st.markdown("**Metrics** (Hₑ = model estimate, Hₘ = reference)")
         st.latex(r"RMSE=\sqrt{\tfrac{1}{n}\sum (H_e-H_m)^2},\quad MAE=\tfrac{1}{n}\sum |H_e-H_m|,\quad "
                  r"MBE=\tfrac{1}{n}\sum (H_e-H_m),\quad R^2 = 1-\tfrac{\sum (H_e-H_m)^2}{\sum (H_m-\bar H_m)^2}")
         st.markdown("**GPI** (y = indicator scaled to 0–1 across the 16 models, ỹ = median)")
         st.latex(r"GPI_i = \sum_j \alpha_j\,(\tilde y_j - y_{ij}),\qquad \alpha_{R^2} = -1,\ "
                  r"\alpha_{RMSE}=\alpha_{MAE}=\alpha_{MBE}=+1")
-         st.caption("GPI values are rounded to 10 decimal places for ranking; tied models share the better rank. "
-                    "A constant indicator contributes zero.")
+        st.caption("GPI values are rounded to 10 decimal places for ranking; tied models share the better rank. "
+                   "A constant indicator contributes zero.")
 
     C.section("info", "Limitations")
     C.html('<div class="card-grid">'

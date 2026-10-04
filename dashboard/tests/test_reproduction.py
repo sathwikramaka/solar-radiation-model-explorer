@@ -8,6 +8,7 @@ import pandas as pd
 
 from engine.config import DISTRICTS, LATITUDE, MODELS, PERIODS
 from engine.pipeline import prepare_days, evaluate_all_periods, top3
+from ui.pages import load_official_results
 
 PROJECT = Path(__file__).resolve().parents[2]
 RESULTS = PROJECT / "results" / "final"
@@ -63,15 +64,19 @@ def test_notebook_exported_metrics_registry_and_hashes():
     assert manifest.loc[target, "sha256"] == actual_hash
 
 
-def test_dashboard_demo_tables_match_notebook_exports():
-    demo = PROJECT / "dashboard" / "data" / "demo"
-    for name in ["annual_gpi.csv", "seasonal_gpi.csv", "top_3_models.csv", "model_ranking.csv"]:
-        expected = pd.read_csv(RESULTS / name).rename(columns={"station": "district"})
-        actual = pd.read_csv(demo / name)
-        pd.testing.assert_frame_equal(actual, expected, check_dtype=False, check_exact=False, rtol=1e-13, atol=1e-13)
-    expected = pd.read_csv(RESULTS / "district_comparison.csv")
-    actual = pd.read_csv(demo / "district_comparison.csv")
-    pd.testing.assert_frame_equal(actual, expected, check_dtype=False, check_exact=False, rtol=1e-13, atol=1e-13)
+def test_dashboard_reads_official_notebook_exports_directly():
+    metrics, comparison, top, provenance, period_coverage = load_official_results()
+    expected_metrics = pd.read_csv(RESULTS / "all_metrics.csv").rename(columns={"station": "district"})
+    expected_top = pd.read_csv(RESULTS / "top_3_models.csv").rename(columns={"station": "district"})
+    expected_comparison = pd.read_csv(RESULTS / "station_comparison.csv").rename(
+        columns={"station": "district", "valid_days": "days used"})
+    pd.testing.assert_frame_equal(metrics, expected_metrics, check_dtype=False)
+    pd.testing.assert_frame_equal(top, expected_top, check_dtype=False)
+    pd.testing.assert_frame_equal(comparison, expected_comparison, check_dtype=False)
+    assert set(provenance.district) == set(DISTRICTS)
+    assert len(period_coverage) == len(DISTRICTS) * len(PERIODS)
+    assert len(metrics) == 240 and len(top) == 45
+    assert not (PROJECT / "dashboard" / "data" / "demo").exists()
 
 
 def test_top3_and_wide_rank_table_have_all_stations_and_periods():
