@@ -213,4 +213,4 @@ Other supplied research papers are preserved in `Research_References/`; they wer
 
 ## 👤 Maintainer
 
-**Sathwik Ramaka** · M.Sc. Agriculture Analytics (DAU · AAU · IIRS-ISRO) · [LinkedIn](https://www.linkedin.com/in/sathwik-ramaka-1ba40227a/) · [GitHub](https://github.com/sathwikramaka)
+**Sathwik Ramaka** · M.Sc. Agriculture Analytics (DAU · AAU · IIRS-ISRO) · [LinkedIn](https://www.linkedin.com/in/sathwikramaka/) · [GitHub](https://github.com/sathwikramaka)
