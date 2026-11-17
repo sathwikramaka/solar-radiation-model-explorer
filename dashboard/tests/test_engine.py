@@ -11,10 +11,10 @@ from engine.gpi import calculate_gpi
 from engine.pipeline import prepare_days, evaluate_period
 
 
-def test_primary_study_solar_geometry():
-    # Study geometry uses dr = 1 + 0.003 cos(2 pi J/365): 20 deg S, J = 246.
+def test_solar_geometry_matches_fao56_example_8():
+    # FAO-56 Example 8 (dr = 1 + 0.033 cos(2 pi J/365)): 20 deg S, 3 September (J = 246) -> Ra = 32.2, N = 11.7.
     N, Ra = day_length_and_ra(246, -20)
-    assert round(float(Ra), 1) == 32.6
+    assert round(float(Ra), 1) == 32.2
     assert round(float(N), 1) == 11.7
 
 
@@ -33,7 +33,7 @@ def test_models_by_hand():
     assert p.M2 == pytest.approx(3.6 * (1.29 + 0.3626 * 16))
     assert p.M10 == pytest.approx(-4.46 + 0.477 * 30 - 0.226 * 26)
     assert p.M15 == pytest.approx((0.236 + 0.106 * 4) * 30)
-    assert p.M16 == pytest.approx((0.00185 * 256 - 0.0433 * 16 + 0.4023) * 30)
+    assert p.M16 == pytest.approx((0.00185 * 256 - 0.0433 * 16 + 0.4023) * 4 * 30)   # Samani (2000): KT*sqrt(dT)*Ra
     assert predict_all([20.0], [20.0], [30.0]).iloc[0][["M1", "M5"]].isna().all()   # dT <= 0 undefined
 
 
@@ -42,8 +42,10 @@ def test_metrics_by_hand():
     assert m["n"] == 3 and m["MBE"] == 0
     assert m["MAE"] == pytest.approx(2 / 3)
     assert m["RMSE"] == pytest.approx(np.sqrt(2 / 3))
-    assert m["R2"] == pytest.approx(1 - 2 / 18)               # SST = 9 + 0 + 9
-    assert calculate_metrics([10, 10], [1, 3])["R2"] < 0      # not clipped
+    assert m["R2"] == pytest.approx(1.0)                      # r^2: estimates are linear in the reference
+    biased = calculate_metrics([10, 9, 12, 8], [1, 3, 2, 5])  # 1 - SSE/SST would be about -27
+    assert 0 <= biased["R2"] <= 1
+    assert biased["R2"] == pytest.approx(np.corrcoef([10, 9, 12, 8], [1, 3, 2, 5])[0, 1] ** 2)
 
 
 def test_gpi_by_hand():
@@ -62,9 +64,10 @@ def test_gpi_ties_share_rank():
 def test_constant_indicator_has_zero_contribution():
     t = pd.DataFrame({"model": ["A", "B", "C"], "R2": [0.5, 0.5, 0.5],
                       "RMSE": [2.0, 2.0, 2.0], "MAE": [1.0, 1.0, 1.0], "MBE": [-1.0, 0.0, 1.0]})
-    g = calculate_gpi(t)
+    g = calculate_gpi(t).set_index("model")
     assert np.isfinite(g.GPI).all()
-    assert g.GPI.to_list() == pytest.approx([0.5, 0.0, -0.5])
+    # |MBE| = [1, 0, 1]: zero bias is best; -1 and +1 bias score the same.
+    assert g.GPI.to_dict() == pytest.approx({"A": 0.0, "B": 1.0, "C": 0.0})
 
 
 def test_seasons():

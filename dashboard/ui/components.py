@@ -17,7 +17,7 @@ METRIC_INFO = {   # label, reading guide, unit, icon
     "RMSE": ("RMSE", "lower is better", UNIT, "straighten"),
     "MAE":  ("MAE", "lower is better", UNIT, "target"),
     "MBE":  ("MBE", "closer to 0 is better · + overestimates, − underestimates", UNIT, "balance"),
-    "R2":   ("R²", "higher is better · can be negative", "", "insights"),
+    "R2":   ("R²", "higher is better · 0 to 1", "", "insights"),
 }
 PERIOD_ICON = {"Annual": "calendar_month", "Winter": "ac_unit", "Pre-Monsoon": "wb_sunny",
                "Monsoon": "rainy", "Post-Monsoon": "partly_cloudy_day"}
@@ -35,16 +35,16 @@ MODEL_PROFILE = {
     "M6":  ("ΔT, Ra", "square-root of ΔT", "recalibrated by Marif et al. (2022)"),
     "M7":  ("Tmax, Tmin, Ra", "ratio Tmax/Tmin", "published coefficients"),
     "M8":  ("Tmax, Tmin, Ra", "ratio Tmin/Tmax", "paper leaves Θ undefined; implementation uses Tmin/Tmax"),
-    "M9":  ("ΔT, Ra", "logarithm of ΔT", "published coefficients, used as-is"),
-    "M10": ("Tmean, Ra", "linear in Ra and mean temperature", "published coefficients, used as-is"),
+    "M9":  ("ΔT, Ra", "logarithm of ΔT", "used as printed; Rs/Ra exceeds the clear-sky limit for ΔT > 8.6 °C"),
+    "M10": ("Tmean, Ra", "linear in Ra and mean temperature", "used as printed; Rs/Ra ≈ 0.15, far below the reference"),
     "M11": ("ΔT, Ra", "linear in ΔT", "published coefficients"),
     "M12": ("Tmax, Tmin, Ra", "ratio Tmin/Tmax", "published coefficients"),
     "M13": ("Tmax, Tmin, Ra", "linear in Tmax and Tmin", "recalibrated by Ghazouani et al. (2022)"),
     "M14": ("Tmean, Ra", "linear in mean temperature", "published coefficients"),
     "M15": ("ΔT, Ra", "square-root of ΔT", "recalibrated by Onyeka et al. (2021)"),
-    "M16": ("ΔT, Ra", "quadratic in ΔT", "used exactly as printed in the supplied study"),
+    "M16": ("ΔT, Ra", "quadratic KT × √ΔT", "original Samani (2000) form; the paper's table omits √ΔT"),
 }
-FLAGGED = {"M2": "unit", "M8": "Theta"}
+FLAGGED = {"M2": "unit", "M8": "Theta", "M9": "coefficients", "M10": "coefficients"}
 
 
 def label(metric):
@@ -375,7 +375,7 @@ def results_view(results, period, metric, key, context, days=None, unavailable_r
     kpis([("Best model", best.model, escape(author(best.model)), "emoji_events", True),
           ("GPI", f"{best.GPI:.2f}", "rank-1 score", "leaderboard", False),
           ("RMSE", f"{best.RMSE:.2f}", UNIT, "straighten", False),
-          ("R²", f"{best.R2:.2f}", "1 − SSE/SST", "insights", False),
+          ("R²", f"{best.R2:.2f}", "r², 0–1", "insights", False),
           ("Days evaluated", f"{int(best.n):,}", PERIOD_MONTHS[period], "event_available", False)])
     section("military_tech", "Top 3 models", f"Highest GPI · {context}", tone="sun")
     if top3_rows is None:

@@ -90,6 +90,21 @@ def test_top3_and_wide_rank_table_have_all_stations_and_periods():
     assert not ranks[PERIODS].isna().any().any()
 
 
+def test_engine_reproduces_notebook_metrics():
+    """Engine and notebook must share geometry, models, R2 = r^2 and the |MBE| GPI."""
+    official = pd.read_csv(RESULTS / "all_metrics.csv").set_index(["station", "period", "model"]).sort_index()
+    assert official.R2.between(0, 1).all()
+    for station in DISTRICTS:
+        days = prepare_days(load_station(station), LATITUDE[station])
+        mine = evaluate_all_periods(days, station).rename(columns={"district": "station"})
+        mine = mine.set_index(["station", "period", "model"]).sort_index()
+        expected = official.loc[station]
+        mine = mine.loc[station].reindex(expected.index)
+        for col in ["R2", "RMSE", "MAE", "MBE", "GPI"]:
+            assert np.allclose(mine[col], expected[col], rtol=1e-9, atol=1e-9), (station, col)
+        assert mine["rank"].astype(int).equals(expected["rank"].astype(int)), station
+
+
 def test_repeated_run_is_rank_reproducible():
     station = "Ahmedabad"
     days = prepare_days(load_station(station), LATITUDE[station])

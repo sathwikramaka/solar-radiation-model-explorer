@@ -187,8 +187,8 @@ def overview():
     C.section("menu_book", "Method at a glance")
     C.flow(METHOD_STEPS)
     C.note("<b>Read the rankings with their assumptions.</b> The reference is radiation estimated from sunshine "
-           "hours, not measured radiation. M2 units and M8 Θ are undefined in the supplied paper, and its R² and signed-MBE "
-           "directions need interpretation. See Methodology.")
+           "hours, not measured radiation. M2 units and M8 Θ are undefined in the supplied paper, and M9 and M10 "
+           "give physically implausible values as printed. See Methodology.")
     C.footer()
 
 
@@ -513,10 +513,10 @@ def methodology():
                    "paper. It is <i>estimated</i>, not measured, radiation.</p>", "sun")
            + _card("analytics", "6 · Metrics", "<ul><li><b>RMSE</b> — typical error size, penalises large errors (best 0)</li>"
                    "<li><b>MAE</b> — average error size (best 0)</li><li><b>MBE</b> — bias; + over, − under (best 0)</li>"
-                   "<li><b>R²</b> = 1 − SSE/SST — variation explained (best 1, can be negative)</li></ul>")
+                   "<li><b>R²</b> = r², squared correlation — variation explained (0–1, best 1)</li></ul>")
            + _card("emoji_events", "7 · GPI and 8 · ranking", "<p>Each metric is scaled to 0–1 across the 16 models. A model "
                    "scores for every metric on which it beats the <b>median</b> model:</p>"
-                   "<p style='margin:.35rem 0'><b>GPI = Σ α·(median − scaled)</b>, α = −1 for R², +1 otherwise.</p>"
+                   "<p style='margin:.35rem 0'><b>GPI = Σ α·(median − scaled)</b>, α = −1 for R², +1 otherwise; MBE enters as |MBE|.</p>"
                    "<p>Highest GPI → rank 1; ranks 1–3 are the Top 3.</p>", "sun")
            + '</div>')
 
@@ -536,8 +536,10 @@ def methodology():
               "Rankings are conditional on these source definitions", tone="warn")
     C.note("<b>M2</b> · the supplied table omits units; 3.6 is used to convert an interpreted kWh output to MJ.<br>"
            "<b>M8</b> · the supplied table does not define Θ; implementation uses Tmin/Tmax.<br>"
-           "<b>R² and MBE</b> · results use the printed formulas; the paper's table/prose is internally inconsistent. "
-           "See the sensitivity table before interpreting rankings.")
+           "<b>M9, M10</b> · kept as printed, but their outputs are physically implausible; the original papers are needed.<br>"
+           "<b>M16</b> · the √ΔT factor of the original Samani (2000) model, missing from the paper's table, is restored.<br>"
+           "<b>R² and MBE</b> · R² is r² (0–1), as in the paper's Table 4; the GPI uses |MBE| because the ideal bias is 0. "
+           "The printed alternatives are in the sensitivity table.")
 
     with st.expander(":material/upload_file: Uploaded data — separate exploratory results"):
         st.markdown("- Official station results on the Overview and Model Explorer pages come directly from the notebook exports.\n"
@@ -550,19 +552,20 @@ def methodology():
 
     with st.expander(":material/functions: Technical details — equations"):
         st.markdown("**Solar geometry** (J = day of year, φ = latitude in radians, Gsc = 0.0820 MJ m⁻² min⁻¹)")
-        st.latex(r"d_r = 1 + 0.003\cos\!\left(\tfrac{2\pi J}{365}\right),\quad "
+        st.latex(r"d_r = 1 + 0.033\cos\!\left(\tfrac{2\pi J}{365}\right),\quad "
                  r"\delta = 0.409\sin\!\left(\tfrac{2\pi J}{365} - 1.39\right),\quad "
                  r"\omega_s = \arccos(-\tan\varphi\,\tan\delta)")
         st.latex(r"N = \tfrac{24}{\pi}\,\omega_s,\qquad R_a = \tfrac{24\cdot 60}{\pi} G_{sc}\, d_r "
                  r"\left[\omega_s \sin\varphi \sin\delta + \cos\varphi \cos\delta \sin\omega_s\right]")
-        st.caption("The primary analysis follows the 0.003 coefficient printed in the cited study's solar-geometry equation.")
+        st.caption("The study prints 0.003 for d_r, a typo for the FAO-56 coefficient 0.033 used here.")
         st.markdown("**Reference**")
         st.latex(r"R_s = R_a\left[0.25 + 0.50\left(\tfrac{n}{N}\right)\right],\qquad 0 \le n \le N")
         st.markdown("Here, $R_s$ is estimated global solar radiation, $R_a$ is extraterrestrial radiation, $n$ is "
                     "measured sunshine duration in hours, and $N$ is maximum possible sunshine duration in hours.")
         st.markdown("**Metrics** (Hₑ = model estimate, Hₘ = reference)")
         st.latex(r"RMSE=\sqrt{\tfrac{1}{n}\sum (H_e-H_m)^2},\quad MAE=\tfrac{1}{n}\sum |H_e-H_m|,\quad "
-                 r"MBE=\tfrac{1}{n}\sum (H_e-H_m),\quad R^2 = 1-\tfrac{\sum (H_e-H_m)^2}{\sum (H_m-\bar H_m)^2}")
+                 r"MBE=\tfrac{1}{n}\sum (H_e-H_m),\quad R^2 = \left(\tfrac{\sum (H_e-\bar H_e)(H_m-\bar H_m)}"
+                 r"{\sqrt{\sum (H_e-\bar H_e)^2\,\sum (H_m-\bar H_m)^2}}\right)^2")
         st.markdown("**GPI** (y = indicator scaled to 0–1 across the 16 models, ỹ = median)")
         st.latex(r"GPI_i = \sum_j \alpha_j\,(\tilde y_j - y_{ij}),\qquad \alpha_{R^2} = -1,\ "
                  r"\alpha_{RMSE}=\alpha_{MAE}=\alpha_{MBE}=+1")
