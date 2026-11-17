@@ -216,9 +216,13 @@ Other supplied research papers are preserved in `Research_References/`; they wer
 
 ## 👥 Team
 
-1. Sathwik
-2. Yaswanthi
-3. Het
-4. Shreya
-5. Gayatri
-6. Gopal
+Group project
+
+| Member | Links |
+|---|---|
+| **Sathwik Ramaka** | [LinkedIn](https://www.linkedin.com/in/sathwikramaka/) · [GitHub](https://github.com/sathwikramaka) |
+| **Kadiri Yaswanthi** | [LinkedIn](https://www.linkedin.com/in/kadiri-yaswanthi-9a632b204/) · [GitHub](https://github.com/YASWANTHI2410) |
+| **Het** | — |
+| **Shreya** | — |
+| **Gayatri** | — |
+| **Gopal** | — |
