@@ -9,6 +9,9 @@ exactly_sixteen_models,PASS
 five_periods_per_station,PASS
 all_240_unique_combinations,PASS
 all_metrics_gpi_ranks_finite,PASS
+R2_within_0_and_1,PASS
+MAE_nonnegative_and_not_above_RMSE,PASS
+abs_MBE_not_above_MAE,PASS
 all_combinations_status_ok,PASS
 all_included_model_predictions_finite,PASS
 all_included_reference_values_finite,PASS

@@ -27,17 +27,18 @@
 | | Result |
 |---|---|
 | 🥇 **Annual leader, Ahmedabad** | **M1** · then M13, M15 |
-| 🥇 **Annual leader, Amreli** | **M1** · then M15, M13 |
-| 🥇 **Annual leader, Okha** (coastal) | **M5** · then M6, M3 |
-| 🔁 **Most consistent across all 15 station-periods** | M1 in the Top 3 ten times, M15 nine times, M14 six |
-| ❌ **Never in a Top 3** | M10, M11, M16 |
+| 🥇 **Annual leader, Amreli** | **M15** · then M1, M13 |
+| 🥇 **Annual leader, Okha** (coastal) | **M9** · then M5, M3 |
+| 🔁 **Most consistent across all 15 station-periods** | M15 in the Top 3 ten times, M5 eight times, M14 five |
+| ❌ **Never in a Top 3** | M7, M8, M10, M11, M16 |
+| 📉 **Annual R²** | 0.02 – 0.50; at coastal Okha every model stays below 0.15 |
 | 📅 Data | 14,474 – 14,802 valid days per station, 1985–2025 (IMD) |
 
 > The reference is the sunshine-based Ångström–Prescott estimate, **not a pyranometer measurement**. Rankings describe agreement with that reference method.
 
 ## 🔍 What makes it different
 
-- **Every assumption written down** — where the source paper is ambiguous (M2 units, M8's Θ, the signed-MBE direction in GPI, the d<sub>r</sub> coefficient, the R² definition) the choice is stated and tested in a sensitivity table.
+- **Every assumption written down** — where the source paper is ambiguous (M2 units, M8's Θ, M16's missing √ΔT, the MBE direction in GPI, the d<sub>r</sub> coefficient, the R² definition) the choice is stated, checked against the supplied references and tested in a sensitivity table.
 - **Seasonal, not just annual** — Winter, Pre-Monsoon, Monsoon and Post-Monsoon ranked separately at each station, because the best model changes with the season.
 - **Nothing filled or patched** — raw IMD rows are kept as delivered; excluded days stay visible with a reason.
 - **Reproducible end to end** — one notebook regenerates every table and figure; SHA-256 hashes and structural checks are exported with the results.
@@ -96,7 +97,7 @@ R_{s,AP}=\left(a+b\frac{n}{N}\right)R_a,
 
 Here, (R_{s,AP}) is the reference global solar radiation (MJ m⁻² day⁻¹), (n) is actual bright sunshine duration (hours), (N=24\omega_s/\pi) is maximum possible sunshine duration (hours), and (R_a) is extraterrestrial radiation (MJ m⁻² day⁻¹). The station latitude and day of year determine (N) and (R_a). The paper does not use Tmin/Tmax in this reference equation. Only days with (0\le n\le N) receive a reference value.
 
-Solar geometry follows the supplied primary paper, Eq. 2–4, p. 5. In particular, the primary results use the printed Earth–Sun distance factor (d_r=1+0.003\cos(2\pi J/365)); the alternative 0.033 coefficient is reported as a sensitivity case. The implementation uses (G_{sc}=0.0820) MJ m⁻² min⁻¹ with the standard 24×60 conversion; the supplied paper appears to mislabel this constant's unit.
+Solar geometry follows the supplied primary paper, Eq. 2–4, p. 5. The paper prints the Earth–Sun distance factor as (d_r=1+0.003\cos(2\pi J/365)). That is a typo: the factor varies by about ±3.3 % over the year, and FAO-56 Eq. 23 (Allen et al., 1998), the source of Eq. 1–4, uses 0.033. The supplied references agree: Sarkar (2016) uses 0.033, and Tripathy et al. (2008) and Almorox et al. (2013) use 0.034. The primary results use 0.033; the printed 0.003 is a sensitivity case. The implementation uses (G_{sc}=0.0820) MJ m⁻² min⁻¹ with the standard 24×60 conversion; the supplied paper appears to mislabel this constant's unit.
 
 </details>
 
@@ -115,16 +116,16 @@ All (R_s) outputs are treated as MJ m⁻² day⁻¹. (\Delta T=T_{max}-T_{min}),
 | M6 | ((0.3040+0.1008\sqrt{\Delta T})R_a) |
 | M7 | ((0.2889+0.1562T_{max}/T_{min})R_a) |
 | M8 | ((1.7217-1.691\Theta)R_a, \Theta=T_{min}/T_{max}) **(interpretation assumption)** |
-| M9 | ((0.28\ln\Delta T+0.15)R_a) |
-| M10 | (-4.46+0.477R_a-0.226T) |
+| M9 | ((0.28\ln\Delta T+0.15)R_a) **(as printed; implausible output)** |
+| M10 | (-4.46+0.477R_a-0.226T) **(as printed; implausible output)** |
 | M11 | ((0.4610+0.0029\Delta T)R_a) |
 | M12 | ((0.5290+0.0516T_{min}/T_{max})R_a) |
 | M13 | ((0.206590+0.026851T_{max}-0.024184T_{min})R_a) |
 | M14 | ((0.85235-0.00997T)R_a) |
 | M15 | ((0.236+0.106\sqrt{\Delta T})R_a) |
-| M16 | ((0.00185\Delta T^2-0.0433\Delta T+0.4023)R_a) |
+| M16 | ((0.00185\Delta T^2-0.0433\Delta T+0.4023)\sqrt{\Delta T}\,R_a) **(original Samani form; √ΔT restored)** |
 
-Primary Table 2 prints M2 as (H=1.29+0.3626\Delta T) without units; a supplied secondary companion instead writes it as (H/H_0). The sources do not establish the factor 3.6, which is retained only as an implementation assumption and compared with no conversion in the sensitivity analysis. M8's (\Theta) is undefined in the primary table and the original Falayi equation is not included in the supplied papers; the implementation uses (T_{min}/T_{max}) by analogy with M12, explicitly as an assumption. M16 follows the printed equation without adding a square root. These points require confirmation from the original cited papers/research group.
+Primary Table 2 prints M2 as (H=1.29+0.3626\Delta T) without units; a supplied secondary companion instead writes it as (H/H_0). The sources do not establish the factor 3.6, which is retained only as an implementation assumption and compared with no conversion in the sensitivity analysis. M8's (\Theta) is undefined in the primary table and the original Falayi equation is not included in the supplied papers; the implementation uses (T_{min}/T_{max}) by analogy with M12, explicitly as an assumption. Table 2 prints M16 as only the KT polynomial; the original Samani (2000) model is (R_s=K_T R_a\sqrt{\Delta T}), as given with the same coefficients in the supplied Almorox et al. (2013), Eq. 9. Without (\sqrt{\Delta T}) the model averages (R_s/R_a\approx0.19) against about 0.59 for the reference (MBE about −14 MJ m⁻² d⁻¹), so the original form is used and the printed form is a sensitivity case. M9 and M10 are kept as printed, but their outputs are physically implausible: M9 exceeds the clear-sky limit (R_s/R_a\approx0.75) whenever (\Delta T>8.6) °C, and M10 averages (R_s/R_a\approx0.15). Their coefficients could not be checked against Chen et al. (2004) and Ertekin & Yaldiz (1999). These points require confirmation from the original cited papers/research group.
 
 </details>
 
@@ -133,7 +134,7 @@ Primary Table 2 prints M2 as (H=1.29+0.3626\Delta T) without units; a supplied s
 
 A daily row contributes to a station-period only when both temperatures and sunshine are present, (T_{max}>T_{min}), (0\le n\le N), and all 16 model outputs are finite. No minimum station-year completeness threshold is imposed. Each station-period requires at least 30 valid daily rows; the minimum is met for every reported cell. Excluded rows remain visible with reasons in `results/final/daily_predictions.csv`.
 
-No station-year completeness filter is imposed. Potential date shifts or systematic sunshine-record errors that are not detectable through these row-level rules remain a limitation and need confirmation from the data provider or research group.
+No station-year completeness filter is imposed. Zero-sunshine days are kept as observed. They fall mainly in the monsoon, but Amreli has 38 dry-season zero-sunshine days with ΔT > 12 °C that may be missing values recorded as 0; they are about 0.3 % of its days. Amreli's one SSH value of 108 h is excluded by the (n\le N) rule. Potential date shifts or systematic sunshine-record errors that are not detectable through these row-level rules remain a limitation and need confirmation from the data provider or research group.
 
 </details>
 
@@ -145,7 +146,7 @@ For daily model estimate (P_i) and reference (O_i), calculated within each stati
 - **RMSE** (=\sqrt{\frac1n\sum(P_i-O_i)^2}); lower is better.
 - **MAE** (=\frac1n\sum|P_i-O_i|); lower is better.
 - **MBE** (=\frac1n\sum(P_i-O_i)); positive values indicate overestimation, negative values underestimation, and zero is ideal.
-- **R²** (=1-\frac{\sum(P_i-O_i)^2}{\sum(O_i-\bar O)^2}); higher is better. It is not clipped and may be negative.
+- **R²** (=r^2=\left(\frac{\sum(P_i-\bar P)(O_i-\bar O)}{\sqrt{\sum(P_i-\bar P)^2\sum(O_i-\bar O)^2}}\right)^2), the coefficient of determination; always 0–1, higher is better. The paper prints (1-SSE/SST), but its Table 4 values are r²: Bhubaneswar annual M-5 has R² = 0.40 with RMSE 5.28 and MBE −3.75, which (1-SSE/SST) cannot give. (1-SSE/SST) turns negative for any strongly biased model and is reported only as a sensitivity. The supplied Almorox et al. (2013) and Sarkar (2016) also print (1-SSE/SST), but for locally calibrated models with near-zero bias, where it is close to r²; the models here are uncalibrated.
 
 </details>
 
@@ -159,9 +160,11 @@ GPI_i=\sum_j\alpha_j(\tilde y_j-y_{ij}),\qquad
 \alpha_{R^2}=-1,\quad\alpha_{RMSE}=\alpha_{MAE}=\alpha_{MBE}=+1,
 \]
 
-where (\tilde y_j) is the median scaled value. This is the paper's unweighted sum; no additional weights are used. Rank is descending GPI. GPI values are rounded to 10 decimal places for ranking; tied models share the best rank (`min` rank), so a Top 3 can contain more than three models in a tie. A constant indicator has a zero contribution rather than producing a division-by-zero result.
+where (\tilde y_j) is the median scaled value. MBE is scaled as (|MBE|), because Table 3 gives its ideal value as 0. This is the paper's unweighted sum; no additional weights are used. Rank is descending GPI. GPI values are rounded to 10 decimal places for ranking; tied models share the best rank (`min` rank), so a Top 3 can contain more than three models in a tie. A constant indicator has a zero contribution rather than producing a division-by-zero result.
 
-There is a material ambiguity in the paper: its text says MBE should be “closer to 0”, but its stated GPI direction ((+1) for error metrics, applied to signed MBE) rewards lower signed MBE and therefore may reward stronger negative bias. The primary results follow the printed formula literally. `results/validation/sensitivity_analysis.csv` reports absolute-MBE, Pearson-r², no-conversion M2, and alternative d_r=0.033 sensitivities. The paper's tabulated R² values behave like Pearson correlation squared rather than its stated (1-SSE/SST); the primary analysis uses the printed formula and records Pearson-r² separately. These are assumptions, not interchangeable definitions.
+Applying the (+1) direction to signed MBE would reward the most negative bias: M10, with MBE ≈ −14 MJ m⁻² d⁻¹, would score best on bias. The primary results therefore use (|MBE|); the tables still report signed MBE, so its sign shows over- or underestimation. `results/validation/sensitivity_analysis.csv` reports the printed alternatives: signed MBE, (1-SSE/SST), M2 without ×3.6, M16 without (\sqrt{\Delta T}), and d_r=0.003.
+
+Negative values that remain are expected. MBE is negative when a model underestimates. GPI is negative when a model is worse than the median model.
 
 </details>
 
@@ -175,7 +178,7 @@ There is a material ambiguity in the paper: its text says MBE should be “close
 - `results/final/station_period_summary.csv`: usable sample sizes and date spans for each period.
 - `results/model_registry.csv`: authoritative model definitions.
 - `results/qc/data_provenance.csv`, `results/qc/year_coverage.csv`, `results/qc/qc_report.csv`: coverage and exclusions.
-- `results/validation/sensitivity_analysis.csv`: effect of M2 units/conversion, R² definition, MBE treatment and the solar-geometry coefficient.
+- `results/validation/sensitivity_analysis.csv`: effect of M2 units/conversion, the printed M16 form, R² definition, MBE treatment and the solar-geometry coefficient.
 - `results/validation/output_hashes.csv`: SHA-256 fingerprints for exported result CSVs and figures.
 - `results/validation/validation_checks.csv`: generated structural, finite-value and reproducibility checks.
 - `results/final/model_cross_district_summary.csv`: cross-station model summary.
@@ -196,14 +199,14 @@ results/model_registry.csv            model definitions (generated)
 figures/final/                        published figures
 dashboard/                            Streamlit explorer + tests
 Research_References/                  source papers
-presentation/                         slide deck
+presentation/                         slide decks (New/ PowerPoint, html/ web); pre-correction versions in Old/
 ```
 
 </details>
 
 ## ⚠️ Limitations
 
-The reference radiation is itself a model (Ångström–Prescott with fixed a = 0.25, b = 0.50), so a high rank means close agreement with that estimate, not with measured radiation. Three points in the source paper (M2's unit conversion, M8's Θ, M16's form) need confirmation from the original authors; the sensitivity table shows how much they move the rankings. Date shifts or systematic sunshine-record errors that pass the row-level checks would not be caught.
+The reference radiation is itself a model (Ångström–Prescott with fixed a = 0.25, b = 0.50), so a high rank means close agreement with that estimate, not with measured radiation. M2's unit conversion and M8's Θ need confirmation from the original authors, and M9 and M10 give physically implausible values as printed; the sensitivity table shows how much the documented choices move the rankings. Date shifts or systematic sunshine-record errors that pass the row-level checks would not be caught.
 
 ## 📚 Research source
 
