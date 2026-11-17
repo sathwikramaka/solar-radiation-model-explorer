@@ -214,6 +214,12 @@ Karale, P., Misra, V., Ghosh, K. & Latwal, S. (2026). *Seasonal and regional eva
 
 Other supplied research papers are preserved in `Research_References/`; they were reviewed as context and are not silently treated as substitutes for definitions absent from the main study.
 
+## 👥 Team
+
+M.Sc. Agriculture Analytics group project (DAU · AAU · IIRS-ISRO), by six members:
+
+**Gayatri · Shreya · Yaswanthi · Het · Gopal · Sathwik**
+
 ## 👤 Maintainer
 
 **Sathwik Ramaka** · M.Sc. Agriculture Analytics (DAU · AAU · IIRS-ISRO) · [LinkedIn](https://www.linkedin.com/in/sathwikramaka/) · [GitHub](https://github.com/sathwikramaka)
