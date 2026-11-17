@@ -216,10 +216,9 @@ Other supplied research papers are preserved in `Research_References/`; they wer
 
 ## 👥 Team
 
-M.Sc. Agriculture Analytics group project (DAU · AAU · IIRS-ISRO), by six members:
-
-**Gayatri · Shreya · Yaswanthi · Het · Gopal · Sathwik**
-
-## 👤 Maintainer
-
-**Sathwik Ramaka** · M.Sc. Agriculture Analytics (DAU · AAU · IIRS-ISRO) · [LinkedIn](https://www.linkedin.com/in/sathwikramaka/) · [GitHub](https://github.com/sathwikramaka)
+1. Sathwik
+2. Yaswanthi
+3. Het
+4. Shreya
+5. Gayatri
+6. Gopal
