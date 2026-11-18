@@ -199,7 +199,8 @@ results/model_registry.csv            model definitions (generated)
 figures/final/                        published figures
 dashboard/                            Streamlit explorer + tests
 Research_References/                  source papers
-presentation/                         slide decks (New/ PowerPoint, html/ web); pre-correction versions in Old/
+presentation/                         slide deck (HTML)
+report/                               project report (Word and PDF)
 ```
 
 </details>
@@ -210,7 +211,7 @@ The reference radiation is itself a model (Ångström–Prescott with fixed a = 
 
 ## 📚 Research source
 
-Karale, P., Misra, V., Ghosh, K. & Latwal, S. (2026). *Seasonal and regional evaluation of sixteen temperature-based solar radiation models for India using a Global Performance Indicator*. Research Square preprint v1, DOI: 10.21203/rs.3.rs-8639991/v1. The supplied PDF is `Research_References/1. Seasonal_and_regional_evaluation_of_sixteen_temper.pdf`.
+Karale, M., Misra, A. K., Ghosh, K. & Latwal, A. (2026). *Seasonal and regional evaluation of sixteen temperature-based solar radiation models for India using a Global Performance Indicator*. Research Square preprint v1, DOI: 10.21203/rs.3.rs-8639991/v1. The supplied PDF is `Research_References/1. Seasonal_and_regional_evaluation_of_sixteen_temper.pdf`.
 
 Other supplied research papers are preserved in `Research_References/`; they were reviewed as context and are not silently treated as substitutes for definitions absent from the main study.
 
